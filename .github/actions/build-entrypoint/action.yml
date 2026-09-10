@@ -1,0 +1,93 @@
+name: Build entrypoint variant
+description: Derive an entrypoint image from a base digest and test it before publishing tags
+inputs:
+  image:
+    description: Primary registry image name
+    required: true
+  digest:
+    description: Digest of the base image built by this job
+    required: true
+  flavor:
+    description: Base flavor name, including fat/debug/valgrind suffixes
+    required: true
+  arch:
+    description: Architecture tag suffix
+    required: true
+  platform:
+    description: Docker platform
+    required: true
+  mirror-image:
+    description: Mirror registry image name
+    required: true
+  mirror-enabled:
+    description: Whether to publish to the mirror
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Select executable and prefix
+      id: flavor
+      shell: bash
+      env:
+        BASE_FLAVOR: ${{ inputs.flavor }}
+      run: |
+        case "$BASE_FLAVOR" in
+          bookworm-debug) variant=-debug ;;
+          bookworm-valgrind) variant=-valgrind ;;
+          *) variant= ;;
+        esac
+        echo "command=openresty${variant}" >> "$GITHUB_OUTPUT"
+        echo "prefix=/usr/local/openresty${variant}" >> "$GITHUB_OUTPUT"
+
+    - name: Extract entrypoint metadata
+      id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ inputs.image }}
+        flavor: latest=false
+        tags: |
+          type=raw,value=${{ inputs.flavor }}-entrypoint-${{ inputs.arch }},enable=${{ github.ref == 'refs/heads/master' }}
+          type=ref,event=tag,suffix=-${{ inputs.flavor }}-entrypoint-${{ inputs.arch }}
+          type=match,pattern=^(.*)-[0-9]+$,group=1,suffix=-${{ inputs.flavor }}-entrypoint-${{ inputs.arch }}
+          type=match,pattern=^([0-9]+\.[0-9]+)\..*-[0-9]+$,group=1,suffix=-${{ inputs.flavor }}-entrypoint-${{ inputs.arch }}
+
+    - name: Build and push candidate digest
+      id: build
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: entrypoint/Dockerfile
+        platforms: ${{ inputs.platform }}
+        build-args: |
+          RESTY_ENTRYPOINT_BASE=${{ inputs.image }}@${{ inputs.digest }}
+          RESTY_ENTRYPOINT_COMMAND=${{ steps.flavor.outputs.command }}
+          RESTY_PREFIX=${{ steps.flavor.outputs.prefix }}
+        labels: ${{ steps.meta.outputs.labels }}
+        outputs: type=image,name=${{ inputs.image }},push-by-digest=true,name-canonical=true,push=true
+
+    - name: Test entrypoint and non-root startup
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}@${{ steps.build.outputs.digest }}
+        SMOKE_PLATFORM: ${{ inputs.platform }}
+      run: |
+        docker pull --platform "$SMOKE_PLATFORM" "$IMAGE"
+        bash ./scripts/smoke-test-entrypoint.sh "$IMAGE"
+
+    - name: Publish tested entrypoint tags
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.image }}@${{ steps.build.outputs.digest }}
+        TAGS: ${{ steps.meta.outputs.tags }}
+        PRIMARY_IMAGE: ${{ inputs.image }}
+        MIRROR_IMAGE: ${{ inputs.mirror-image }}
+        MIRROR_ENABLED: ${{ inputs.mirror-enabled }}
+      run: |
+        while IFS= read -r tag; do
+          [ -n "$tag" ] || continue
+          docker buildx imagetools create -t "$tag" "$SOURCE"
+          if [[ "$MIRROR_ENABLED" == 'true' ]]; then
+            mirror_tag="${MIRROR_IMAGE}${tag#"$PRIMARY_IMAGE"}"
+            docker buildx imagetools create -t "$mirror_tag" "$SOURCE"
+          fi
+        done <<< "$TAGS"

@@ -33,18 +33,19 @@ RESTY_LATEST_SERIES="${RESTY_LATEST_SERIES:-1.29}"
 # Define architectures for each flavor
 # Default to amd64 and arm64, can be overridden by RESTY_ARCHS env var
 ARCHS="${RESTY_ARCHS:-amd64 arm64}"
+BASE_FLAVOR="${FLAVOR%-entrypoint}"
 
 # Add s390x for flavors that build it (must match the workflow build matrix)
 S390X_FLAVORS=("alma" "jammy" "noble" "resolute")
 for s390x_flavor in "${S390X_FLAVORS[@]}"; do
-    if [[ "$FLAVOR" == "$s390x_flavor" ]]; then
+    if [[ "$BASE_FLAVOR" == "$s390x_flavor" ]]; then
         ARCHS="$ARCHS s390x"
         break
     fi
 done
 
 # Fedora only supports amd64 in this setup
-if [[ "$FLAVOR" == "fedora" ]]; then
+if [[ "$BASE_FLAVOR" == "fedora" ]]; then
   ARCHS="amd64"
 fi
 
@@ -152,8 +153,8 @@ for TAG_PREFIX in "${PREFIXES[@]}"; do
         fi
     fi
 
-    if [[ "$FLAVOR" == "fedora" ]]; then
-       ALIAS_TAG="${TAG_PREFIX}fedora-rpm"
+    if [[ "$BASE_FLAVOR" == "fedora" ]]; then
+       ALIAS_TAG="${TAG_PREFIX}fedora-rpm${FLAVOR#"$BASE_FLAVOR"}"
        echo "Creating alias $ALIAS_TAG -> $TARGET_TAG"
        if [[ "$DRY_RUN" != "true" ]]; then
            docker buildx imagetools create -t "${REGISTRY_IMAGE}:$ALIAS_TAG" "${REGISTRY_IMAGE}:$TARGET_TAG"

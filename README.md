@@ -272,7 +272,7 @@ Docker Entrypoint
 
 Append `-entrypoint` to any published Linux flavor to opt into an Nginx-style startup layer: for example, `bookworm-entrypoint`, `alpine-slim-entrypoint`, `bookworm-fat-entrypoint`, or `bookworm-debug-entrypoint`. These are derived images built with [entrypoint/Dockerfile](entrypoint/Dockerfile). Existing flavors and `latest` retain their original startup behavior, configuration, and directory permissions. Windows and archived flavors have no entrypoint variants.
 
-Each derived image inherits its base's architecture and installed OpenResty binaries, and adds `envsubst` when missing. The layer installs [`docker-entrypoint.sh`](docker-entrypoint.sh), startup hooks, and the non-root PID/directory changes described above. It does not rebuild OpenResty.
+Each derived image uses the exact base digest built by the same CI job, inherits its architecture and installed OpenResty binaries, and adds `envsubst` when missing. The layer installs [`docker-entrypoint.sh`](docker-entrypoint.sh), startup hooks, and the non-root PID/directory changes described above. It does not rebuild OpenResty.
 
 Tags follow the existing version scheme: `<version>-bookworm-entrypoint`, `1.31-bookworm-entrypoint`, and architecture-specific tags such as `bookworm-entrypoint-arm64`. Each variant has the same architectures as its base; `fedora-entrypoint` is amd64-only. See [BUILDING.md](BUILDING.md#building-entrypoint-variants) to build locally.
 

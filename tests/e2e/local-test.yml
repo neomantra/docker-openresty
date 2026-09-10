@@ -18,6 +18,10 @@ jobs:
             arch: amd64
             dockerfile: alpine-apk/Dockerfile
             platforms: linux/amd64
+          - flavor: bookworm-test
+            arch: amd64
+            dockerfile: bookworm/Dockerfile
+            platforms: linux/amd64
 
     steps:
       - name: Checkout
@@ -44,6 +48,7 @@ jobs:
             type=raw,value=${{ matrix.flavor }}-${{ matrix.arch }}
 
       - name: Build and push
+        id: base
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -53,6 +58,17 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Derive entrypoint image from base digest
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: entrypoint/Dockerfile
+          platforms: ${{ matrix.platforms }}
+          push: true
+          tags: ${{ env.GHCR_IMAGE }}:${{ matrix.flavor }}-entrypoint-${{ matrix.arch }}
+          build-args: |
+            RESTY_ENTRYPOINT_BASE=${{ env.GHCR_IMAGE }}@${{ steps.base.outputs.digest }}
+
       - name: Tag and Push to Mirror
         run: |
           for TAG in ${{ steps.meta.outputs.tags }}; do
@@ -61,12 +77,18 @@ jobs:
             docker buildx imagetools create -t "$DOCKERHUB_TAG" "$TAG"
           done
 
+      - name: Mirror entrypoint image
+        run: |
+          docker buildx imagetools create \
+            -t "${{ env.DOCKERHUB_IMAGE }}:${{ matrix.flavor }}-entrypoint-${{ matrix.arch }}" \
+            "${{ env.GHCR_IMAGE }}:${{ matrix.flavor }}-entrypoint-${{ matrix.arch }}"
+
   manifest:
     needs: build
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        flavor: [alpine-apk-test]
+        flavor: [alpine-apk-test, bookworm-test, alpine-apk-test-entrypoint, bookworm-test-entrypoint]
     steps:
       - name: Checkout
         uses: actions/checkout@v5

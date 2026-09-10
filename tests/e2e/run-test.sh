@@ -17,7 +17,14 @@ act workflow_dispatch \
     --network host
 
 echo "Test complete. Verifying images..."
-docker pull --platform linux/amd64 localhost:5001/neomantra/openresty:alpine-apk-test-amd64
-docker pull --platform linux/amd64 localhost:5002/openresty/openresty:alpine-apk-test-amd64
+for flavor in alpine-apk bookworm; do
+    for suffix in "" -entrypoint; do
+        docker pull --platform linux/amd64 "localhost:5001/neomantra/openresty:${flavor}-test${suffix}-amd64"
+        docker pull --platform linux/amd64 "localhost:5002/openresty/openresty:${flavor}-test${suffix}-amd64"
+    done
+    base="localhost:5002/openresty/openresty:${flavor}-test-amd64"
+    test "$(docker image inspect --format '{{json .Config.Entrypoint}}' "$base")" = null
+    bash ./scripts/smoke-test-entrypoint.sh "localhost:5002/openresty/openresty:${flavor}-test-entrypoint-amd64"
+done
 
 echo "✅ verification successful!"

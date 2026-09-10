@@ -230,6 +230,13 @@ docker build --build-arg RESTY_VERSION="1.27.1.2" -f windows/Dockerfile .
 GitHub Actions
 ==============
 
+The standard Linux images keep their existing Dockerfiles and defaults. Each CI
+job also builds an optional entrypoint variant from that job's base-image digest,
+using the shared [entrypoint/Dockerfile](entrypoint/Dockerfile). Entrypoint tags
+are published only after startup and template smoke tests pass on that architecture.
+Multi-architecture manifests and the optional Docker Hub mirror follow the same
+flavor/version conventions as the base images; `latest` remains the standard image.
+
 The GitHub Actions to build is located in the [`.github/workflows/docker-publish.yml`](./.github/workflows/docker-publish.yml) file.
 
 | Environment Variable | Description |
@@ -257,8 +264,8 @@ docker build -f entrypoint/Dockerfile \
   -t openresty-local:bookworm-entrypoint .
 ```
 
-Use a full `image@sha256:...` reference for an immutable base.
-OpenResty is not rebuilt.
+Use a full `image@sha256:...` reference for an immutable base; CI always supplies
+the digest produced by the preceding base build. OpenResty is not rebuilt.
 
 | Build argument | Default | Purpose |
 | --- | --- | --- |
@@ -292,4 +299,7 @@ The suite uses disposable containers and dynamically allocated localhost ports.
 End-To-End Tests
 ================
 
-The script [`./tests/e2e/run-test.sh`](./tests/e2e/run-test.sh) will stand up two local container registries and attempt to build all the images.
+The script [`./tests/e2e/run-test.sh`](./tests/e2e/run-test.sh) starts two local
+registries and uses Act to build Alpine APK and Bookworm base images plus their
+derived entrypoint variants. It verifies both registries and runs the entrypoint
+smoke suite against the mirrored variants.

@@ -258,6 +258,7 @@ jobs:
             type=match,pattern=^([0-9]+\.[0-9]+)\..*-[0-9]+$,group=1,suffix=-${{ matrix.flavor }}-${{ matrix.arch }}
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -278,6 +279,17 @@ jobs:
               docker buildx imagetools create -t "$DOCKERHUB_TAG" "$TAG"
             fi
           done
+
+      - name: Build and publish entrypoint variant
+        uses: ./.github/actions/build-entrypoint
+        with:
+          image: ${{ env.GHCR_IMAGE }}
+          digest: ${{ steps.build.outputs.digest }}
+          flavor: ${{ matrix.flavor }}
+          arch: ${{ matrix.arch }}
+          platform: ${{ matrix.platforms }}
+          mirror-image: ${{ env.DOCKERHUB_IMAGE }}
+          mirror-enabled: ${{ vars.ENABLE_DOCKERHUB_MIRROR }}
 
   manifest:
     needs: build
@@ -322,6 +334,9 @@ jobs:
       - name: Create and Push Manifest
         run: ./scripts/create-manifest.sh "${{ matrix.flavor }}" "${{ env.GHCR_IMAGE }}" "${{ env.DOCKERHUB_IMAGE }}" "${{ vars.ENABLE_DOCKERHUB_MIRROR }}"
 
+
+      - name: Create and Push Entrypoint Manifest
+        run: ./scripts/create-manifest.sh "${{ matrix.flavor }}-entrypoint" "${{ env.GHCR_IMAGE }}" "${{ env.DOCKERHUB_IMAGE }}" "${{ vars.ENABLE_DOCKERHUB_MIRROR }}"
 
   build-fat:
     needs: manifest
@@ -404,6 +419,7 @@ jobs:
             type=match,pattern=^([0-9]+\.[0-9]+)\..*-[0-9]+$,group=1,suffix=-${{ matrix.flavor }}-${{ matrix.arch }}
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -426,6 +442,17 @@ jobs:
               docker buildx imagetools create -t "$MIRROR_TAG" "$TAG"
             fi
           done
+
+      - name: Build and publish entrypoint variant
+        uses: ./.github/actions/build-entrypoint
+        with:
+          image: ${{ env.GHCR_IMAGE }}
+          digest: ${{ steps.build.outputs.digest }}
+          flavor: ${{ matrix.flavor }}
+          arch: ${{ matrix.arch }}
+          platform: ${{ matrix.platforms }}
+          mirror-image: ${{ env.DOCKERHUB_IMAGE }}
+          mirror-enabled: ${{ vars.ENABLE_DOCKERHUB_MIRROR }}
 
   # Windows disabled for now
   # build-windows:
@@ -580,3 +607,6 @@ jobs:
 
       - name: Create and Push Manifest
         run: ./scripts/create-manifest.sh "${{ matrix.flavor }}" "${{ env.GHCR_IMAGE }}" "${{ env.DOCKERHUB_IMAGE }}" "${{ vars.ENABLE_DOCKERHUB_MIRROR }}"
+
+      - name: Create and Push Entrypoint Manifest
+        run: ./scripts/create-manifest.sh "${{ matrix.flavor }}-entrypoint" "${{ env.GHCR_IMAGE }}" "${{ env.DOCKERHUB_IMAGE }}" "${{ vars.ENABLE_DOCKERHUB_MIRROR }}"

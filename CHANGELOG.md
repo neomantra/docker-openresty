@@ -6,6 +6,8 @@
  * Add optional `-entrypoint` variants for every published Linux flavor, including
    fat, buildpack, debug, and Valgrind variants. Existing images and `latest`
    retain their startup behavior and configuration.
+ * Build the entrypoint layer from the exact base-image digest produced by CI;
+   test each architecture before publishing entrypoint tags and mirrors.
  * Entrypoint variants add sorted startup hooks, HTTP/stream environment templates,
    log-symlink warnings, and flag forwarding to the flavor's OpenResty executable
    (#186, #146, #91).
