@@ -1,6 +1,21 @@
 `docker-openresty` Changelog
 ============================
 
+## Unreleased
+
+ * Add optional `-entrypoint` variants for every published Linux flavor, including
+   fat, buildpack, debug, and Valgrind variants. Existing images and `latest`
+   retain their startup behavior and configuration.
+ * Entrypoint variants add sorted startup hooks, HTTP/stream environment templates,
+   log-symlink warnings, and flag forwarding to the flavor's OpenResty executable
+   (#186, #146, #91).
+ * Support arbitrary non-root UIDs in entrypoint variants by relocating the PID
+   to `/var/run/openresty/nginx.pid` and making that directory mode `1777` (#119).
+ * Preserve exported `.envsh` variables in the final command and reject failed
+   hooks, unwritable template output, and conflicting `stream.main` files.
+ * Add local smoke coverage for non-root/read-only startup, variants, hooks,
+   command bypass, and HTTP/stream template rendering (#125).
+
 ## 1.31.1.1-3 (2026-09-04)
 
  * Upgrade OpenSSL to 3.5.8

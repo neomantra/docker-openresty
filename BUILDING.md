@@ -245,6 +245,50 @@ The GitHub Actions to build is located in the [`.github/workflows/docker-publish
 | DOCKERHUB_PASSWORD | Docker Hub password |
 
 
+Building Entrypoint Variants
+============================
+
+Build a thin entrypoint layer on any published Linux flavor, or a local standard
+image you have just built:
+
+```bash
+docker build -f entrypoint/Dockerfile \
+  --build-arg RESTY_ENTRYPOINT_BASE=openresty/openresty:bookworm \
+  -t openresty-local:bookworm-entrypoint .
+```
+
+Use a full `image@sha256:...` reference for an immutable base.
+OpenResty is not rebuilt.
+
+| Build argument | Default | Purpose |
+| --- | --- | --- |
+| `RESTY_ENTRYPOINT_BASE` | `openresty/openresty:bookworm` | Full base image reference, including tag or digest |
+| `RESTY_ENTRYPOINT_COMMAND` | `openresty` | Server executable used for leading flags and the default command |
+| `RESTY_PREFIX` | `/usr/local/openresty` | Prefix containing the server configuration, logs, and HTML |
+
+For `bookworm-debug-entrypoint`, use the `bookworm-debug` base, command
+`openresty-debug`, and prefix `/usr/local/openresty-debug`. For
+`bookworm-valgrind-entrypoint`, use the corresponding `-valgrind` values.
+Standard and fat flavors use the default command and prefix.
+
+The local build helper selects these arguments for suffixed flavor names:
+
+```bash
+./scripts/test-build-actions.sh bookworm-debug-entrypoint arm64
+```
+
+It derives from the published base flavor by default; set `RESTY_ENTRYPOINT_BASE`
+to override that reference. To exercise the layer after a local build:
+
+```bash
+SMOKE_PLATFORM=linux/arm64 bash scripts/smoke-test-entrypoint.sh openresty-local:bookworm-entrypoint
+```
+
+The smoke suite tests the default server command, except for `bookworm-valgrind-entrypoint`, whose diagnostic server runs under Valgrind after startup hooks and configuration validation. Both paths must serve HTTP as an arbitrary UID with capabilities dropped, including with a read-only root filesystem.
+
+Select the platform you built (`linux/amd64`, `linux/arm64`, or `linux/s390x`).
+The suite uses disposable containers and dynamically allocated localhost ports.
+
 End-To-End Tests
 ================
 

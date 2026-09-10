@@ -63,7 +63,7 @@ Even with the config fix applied, apply these container-level controls:
 
 ### Run as Non-Root with a Read-Only Filesystem
 
-Selecting `--user` alone is insufficient: Nginx needs a writable PID location and temporary directories. The following example runs the `bookworm` image as UID/GID `10001:10001`, with a read-only root filesystem and no Linux capabilities.
+For standard flavors, selecting `--user` alone is insufficient: Nginx needs a writable PID location and temporary directories. The following example runs the `bookworm` image as UID/GID `10001:10001`, with a read-only root filesystem and no Linux capabilities. Optional `-entrypoint` variants have different runtime defaults; see below.
 
 Save this as `nonroot.default.conf` in your current directory. Port 8080 avoids needing `NET_BIND_SERVICE` on runtimes that enforce privileged ports. Docker normally sets `net.ipv4.ip_unprivileged_port_start=0` in containers, allowing non-root processes to bind port 80 without that capability; other runtimes and configurations may differ:
 
@@ -128,6 +128,12 @@ Prevent processes from gaining additional privileges (also included in the examp
 ```bash
 --security-opt no-new-privileges=true
 ```
+
+### Optional Entrypoint Variants
+
+Only `-entrypoint` images run scripts from `/docker-entrypoint.d` and render `/etc/nginx/templates` at startup. Treat those mounts as trusted code and configuration. Prefer read-only mounts of specific hooks; replacing the entire hooks directory hides the stock scripts. An unwritable template output directory or a failed hook stops startup.
+
+These variants already set `pid /var/run/openresty/nginx.pid;`. Omit the `pid` override from the standard-image example above when using an entrypoint image, or Nginx will reject the duplicate directive. They also make `/var/run/openresty` mode `1777` to support arbitrary UIDs. For a fixed UID, prefer the owned, mode-`0700` tmpfs shown above; it replaces the image's more permissive directory. See [README: Running as Non-Root](README.md#running-as-non-root) for complete entrypoint examples.
 
 ---
 

@@ -24,6 +24,8 @@ Table of Contents
 * [Usage](#usage)
 * [Policies](#policies)
 * [Nginx Config Files](#nginx-config-files)
+* [Running as Non-Root](#running-as-non-root)
+* [Docker Entrypoint](#docker-entrypoint)
 * [OPM](#opm)
 * [LuaRocks](#luarocks)
 * [Tips & Pitfalls](#tips--pitfalls)
@@ -92,7 +94,9 @@ docker run [options] openresty/openresty:bookworm-fat
 
 `docker-openresty` symlinks `/usr/local/openresty/nginx/logs/access.log` and `error.log` to `/dev/stdout` and `/dev/stderr` respectively, so that Docker logging works correctly.  If you change the log paths in your `nginx.conf`, you should symlink those paths as well. This is not possible with the `windows` image.
 
-Temporary directories such as `client_body_temp_path` are stored in `/var/run/openresty/`.  You may consider mounting that volume, rather than writing to a container-local directory.  This is not done for `windows`.
+⚠️ Do **not** bind-mount a host directory over `/usr/local/openresty/nginx/logs`: the mount shadows those symlinks, so logging silently goes to regular files inside the mount and nothing appears in `docker logs` ([#91](https://github.com/openresty/docker-openresty/issues/91)).  Mounting a *named volume* there with Docker's default copy behavior is harmless because Docker copies the image's symlinks into an empty named volume on first use; named volumes mounted with the `nocopy` option have the same problem as bind mounts.  The [entrypoint](#docker-entrypoint) warns at startup when these paths are not symlinks; if logging to files is what you want, silence it with `NGINX_ENTRYPOINT_QUIET_LOGS=1`.
+
+All default runtime-writable paths — the `*_temp_path` temporary directories and (since `1.31.1.1-3`) the PID file — live under `/var/run/openresty/`, which has `/tmp`-style permissions (mode `1777`).  You may mount a `tmpfs` there rather than writing to a container-local directory; see [Running as Non-Root](#running-as-non-root) for details and caveats.  This is not done for `windows`.
 
 Supported tags and respective `Dockerfile` links
 =========
@@ -195,6 +199,168 @@ docker run -v C:/my/custom/nginx.conf:C:/openresty/conf/nginx.conf openresty/ope
 ```
 
 
+Running as Non-Root
+===================
+
+The optional `-entrypoint` images support arbitrary non-root UIDs ([#119](https://github.com/openresty/docker-openresty/issues/119)). Standard flavors retain their existing PID path and permissions; use the complete example in [HARDENING.md](HARDENING.md#run-as-non-root-with-a-read-only-filesystem) for those images.
+
+For an entrypoint variant:
+
+```
+docker run --user 1000:1000 openresty/openresty:bookworm-entrypoint
+```
+
+In `-entrypoint` images, all default runtime-writable paths live under `/var/run/openresty`, which has `/tmp`-style permissions (mode `1777`):
+
+ * the `*_temp_path` directories (`client_body`, `proxy`, `fastcgi`, `uwsgi`, `scgi`)
+ * the PID file `/var/run/openresty/nginx.pid`
+
+Access and error logs are symlinked to `/dev/stdout` and `/dev/stderr`, so nothing else needs to be writable.  If you replace the stock [`nginx.conf`](#nginx-config-files), keep its `pid` and `*_temp_path` directives pointing at a writable location.
+
+The [default virtual host](https://github.com/openresty/docker-openresty/blob/master/nginx.vh.default.conf) listens on port 80. Docker normally allows non-root processes to bind low ports inside containers. On runtimes that enforce privileged ports, change `listen` to an unprivileged port such as `8080`, or set `net.ipv4.ip_unprivileged_port_start` as in the Kubernetes example below. See [Kubernetes sysctl documentation](https://kubernetes.io/docs/tasks/administer-cluster/sysctl-cluster/#safe-and-unsafe-sysctls).
+
+With a read-only root filesystem (`docker run --read-only` or Kubernetes `readOnlyRootFilesystem: true`), mount a writable `tmpfs` / `emptyDir` at `/var/run/openresty`:
+
+```
+docker run --user 1000:1000 --read-only --cap-drop=ALL \
+  --security-opt no-new-privileges=true \
+  --tmpfs /var/run/openresty:rw,noexec,nosuid,nodev,size=64m,mode=0700,uid=1000,gid=1000 \
+  openresty/openresty:bookworm-entrypoint
+```
+
+```yaml
+# Kubernetes
+spec:
+  securityContext:
+    fsGroup: 1000
+    sysctls:
+      # allow nginx to bind port 80 as a non-root user
+      - name: net.ipv4.ip_unprivileged_port_start
+        value: "0"
+  containers:
+    - name: openresty
+      image: openresty/openresty:bookworm-entrypoint
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      volumeMounts:
+        - name: openresty-run
+          mountPath: /var/run/openresty
+  volumes:
+    - name: openresty-run
+      emptyDir:
+        medium: Memory
+        sizeLimit: 64Mi
+```
+
+Mount the `tmpfs` at `/var/run/openresty` itself, not at `/var/run` — nginx creates its temporary directories inside `/var/run/openresty`, but does not recreate that directory when a mount hides it.  Use an ephemeral mount (`tmpfs` / `emptyDir`), not a persistent volume: files left behind by a run under a different UID (a stale root-owned `nginx.pid`, `0700` temp directories) block later non-root startups, and a mounted directory's own permissions replace the image's `1777`.
+
+The 64 MiB limit is shared by request-body temporary files and proxy buffering spills; size it for your workload. The image's `1777` directory permits any container process to create entries, so prefer a mount owned by a fixed UID/GID when practical. Mode `0700` works in the Docker example because master and workers use the same UID.
+
+If you use [configuration templates](#docker-entrypoint), the entrypoint renders them into `/etc/nginx/conf.d`, which is root-owned. Non-root runs must make the output directory writable using a derived image or a suitably owned volume. An unwritable output directory causes startup to fail. Mounting an empty volume there hides the stock `default.conf`, so templates must supply the entire server configuration. Stream templates also need writable `/etc/nginx/stream-conf.d` and `/etc/nginx/conf.d` directories.
+
+See [HARDENING.md](HARDENING.md) for broader container-hardening guidance.
+
+
+Docker Entrypoint
+=================
+
+Append `-entrypoint` to any published Linux flavor to opt into an Nginx-style startup layer: for example, `bookworm-entrypoint`, `alpine-slim-entrypoint`, `bookworm-fat-entrypoint`, or `bookworm-debug-entrypoint`. These are derived images built with [entrypoint/Dockerfile](entrypoint/Dockerfile). Existing flavors and `latest` retain their original startup behavior, configuration, and directory permissions. Windows and archived flavors have no entrypoint variants.
+
+Each derived image inherits its base's architecture and installed OpenResty binaries, and adds `envsubst` when missing. The layer installs [`docker-entrypoint.sh`](docker-entrypoint.sh), startup hooks, and the non-root PID/directory changes described above. It does not rebuild OpenResty.
+
+Tags follow the existing version scheme: `<version>-bookworm-entrypoint`, `1.31-bookworm-entrypoint`, and architecture-specific tags such as `bookworm-entrypoint-arm64`. Each variant has the same architectures as its base; `fedora-entrypoint` is amd64-only. See [BUILDING.md](BUILDING.md#building-entrypoint-variants) to build locally.
+
+When the container's command is `openresty` or `nginx` (or their `-debug`/`-valgrind` variants — matched by basename, so full paths like `/usr/bin/openresty` work too), the entrypoint first executes any executable `*.sh` scripts in `/docker-entrypoint.d/` in sorted order, sourcing `*.envsh` files along the way, and then `exec`s the command.  Any other command (`resty`, `luajit`, `sh`, ...) is `exec`ed directly, skipping those scripts, so this image can still be used to invoke its other binaries.  Set `NGINX_ENTRYPOINT_QUIET_LOGS=1` to suppress the entrypoint's log output.
+
+When switching from a standard flavor to `-entrypoint`, review mounts at `/docker-entrypoint.d` and `/etc/nginx/templates`: they become active at startup. Only mount trusted scripts. The PID also moves to `/var/run/openresty/nginx.pid`. Overriding `ENTRYPOINT` skips hooks but does not undo the derived layer's PID configuration or directory permissions; select the standard flavor to retain all original defaults.
+
+⚠️ Binding a volume over the entire `/docker-entrypoint.d` directory **replaces** the stock contents of that directory (the scripts listed below, e.g. [`20-envsubst-on-templates.sh`](https://github.com/openresty/docker-openresty/blob/master/docker-entrypoint.d/20-envsubst-on-templates.sh)).  If you still want template rendering, include that script in your mount (or copy it into your image) alongside your own scripts.  Prefer adding individual files under that path, or `COPY` scripts into a derived image, rather than shadowing the whole directory.
+
+Log Symlink Check
+-----------------
+
+The stock script [`10-check-log-symlinks.sh`](https://github.com/openresty/docker-openresty/blob/master/docker-entrypoint.d/10-check-log-symlinks.sh) warns on startup when `access.log` or `error.log` in the image's log directory is not a symlink.  That directory is read from the `RESTY_LOG_DIR` environment variable, which defaults to `/usr/local/openresty/nginx/logs`; the debug and valgrind images set it to their flavor-specific prefix, and derived images with custom log locations can set it likewise.  The image ships the log paths as symlinks to `/dev/stdout` and `/dev/stderr` so that logs reach `docker logs`; bind-mounting a volume over the logs directory shadows the symlinks and silently redirects logging into regular files (see [Usage](#usage) and issue [#91](https://github.com/openresty/docker-openresty/issues/91)).  The warning is written to stderr; set `NGINX_ENTRYPOINT_QUIET_LOGS=1` to suppress it if logging to files is intentional.
+
+Custom Entrypoint Scripts
+-------------------------
+
+To run your own init logic when OpenResty starts, add an executable `*.sh` (or `*.envsh` to source) under `/docker-entrypoint.d/`.  Files run in version-sort order (`sort -V`), so numeric prefixes control ordering relative to the stock `10-check-log-symlinks.sh` and `20-envsubst-on-templates.sh`:
+
+```
+# In a derived Dockerfile
+COPY 40-my-init.sh /docker-entrypoint.d/40-my-init.sh
+RUN chmod +x /docker-entrypoint.d/40-my-init.sh
+```
+
+Or at runtime with a file mount (this does not hide the stock scripts):
+
+```
+docker run -v "$PWD/40-my-init.sh:/docker-entrypoint.d/40-my-init.sh:ro" openresty/openresty:bookworm-entrypoint
+```
+
+Flag Convenience and `RESTY_ENTRYPOINT_COMMAND`
+-----------------------------------------------
+
+If the first argument is a flag, the entrypoint prepends `RESTY_ENTRYPOINT_COMMAND`. This defaults to `openresty`; `bookworm-debug-entrypoint` and `bookworm-valgrind-entrypoint` select `openresty-debug` and `openresty-valgrind`, respectively. Their log and document-root paths also use the matching variant prefix. The default `CMD` is `["-g", "daemon off;"]`. Supplying your own arguments replaces those flags, so include `daemon off;` when starting a server:
+
+```
+docker run openresty/openresty:bookworm-entrypoint -g "daemon off; env FOO;"
+```
+
+Derivative images that change the server binary can set:
+
+```
+ENV RESTY_ENTRYPOINT_COMMAND="openresty-debug"
+```
+
+`bookworm-valgrind-entrypoint` remains a diagnostic image, not a production server. On ARM64, its Lua VM can fail to initialize outside Valgrind, including in the unchanged standard image. To run it under instrumentation, explicitly run startup hooks/configuration validation before Valgrind (a `sh` or `valgrind` command otherwise bypasses hooks):
+
+```sh
+docker run --rm openresty/openresty:bookworm-valgrind-entrypoint sh -ec '
+  /docker-entrypoint.sh -t
+  export TMPDIR=/var/run/openresty
+  exec valgrind --tool=memcheck openresty-valgrind -g "daemon off; master_process off;"
+'
+```
+
+`TMPDIR` keeps Valgrind's temporary files on the runtime mount when using a read-only root filesystem. See OpenResty's [Valgrind debugging guidance](https://openresty.org/en/debugging.html).
+
+Environment Variables in Nginx Configuration
+--------------------------------------------
+
+The stock script [`20-envsubst-on-templates.sh`](https://github.com/openresty/docker-openresty/blob/master/docker-entrypoint.d/20-envsubst-on-templates.sh) templates environment variables into nginx configuration, [like the official Nginx image does](https://github.com/docker-library/docs/tree/master/nginx#using-environment-variables-in-nginx-configuration-new-in-119).  It reads template files from `/etc/nginx/templates/*.template` and writes the results of `envsubst` to `/etc/nginx/conf.d`, which the default `nginx.conf` includes.  It does nothing if `/etc/nginx/templates` does not exist; note that when it does, `/etc/nginx/conf.d` must be writable at startup.
+
+For example, with a file `/etc/nginx/templates/default.conf.template` containing:
+
+```
+server {
+    listen ${NGINX_PORT};
+    ...
+}
+```
+
+and running with `-e NGINX_PORT=8080`, the entrypoint writes `/etc/nginx/conf.d/default.conf` with `listen 8080;`.
+
+For compatibility with the Nginx image, the same environment variables control its behavior:
+
+ * `NGINX_ENVSUBST_TEMPLATE_DIR` — template directory (default: `/etc/nginx/templates`)
+ * `NGINX_ENVSUBST_TEMPLATE_SUFFIX` — template file suffix (default: `.template`)
+ * `NGINX_ENVSUBST_OUTPUT_DIR` — output directory (default: `/etc/nginx/conf.d`)
+ * `NGINX_ENVSUBST_FILTER` — regex to restrict which environment variables are substituted (default: none, all variables)
+ * `NGINX_ENVSUBST_STREAM_TEMPLATE_SUFFIX` — stream template file suffix (default: `.stream-template`)
+ * `NGINX_ENVSUBST_STREAM_OUTPUT_DIR` — stream output directory (default: `/etc/nginx/stream-conf.d`)
+
+Stream templates (`*.stream-template`) are rendered into `/etc/nginx/stream-conf.d`.  Instead of appending a `stream` block to `nginx.conf` like the Nginx image does, the script writes `/etc/nginx/conf.d/stream.main`, which the default `nginx.conf` picks up via its `include /etc/nginx/conf.d/*.main;` directive (see [Nginx Config Files](#nginx-config-files)).
+
+If a stream block already exists in a `*.main` file, include the stream output directory there. If `stream.main` exists without an active stream block, startup fails instead of overwriting it. Executable `.envsh` hooks are sourced in the entrypoint shell, and exported variables are available to later hooks and the final command. Failed hooks stop startup.
+
+
 OPM
 ===
 
@@ -222,8 +388,8 @@ RUN /usr/local/openresty/luajit/bin/luarocks install <rock>
 Tips & Pitfalls
 ===============
 
- * The `envsubst` utility is included in all images except `alpine` and `windows`; this utility is also included
- in the Nginx docker image and is used to template environment variables into configuration files.
+ * All `-entrypoint` variants include `envsubst` for configuration templates. Availability in
+ standard flavors depends on their Dockerfile. See [Docker Entrypoint](#docker-entrypoint).
 
  * By default, OpenResty is built with SSE4.2 optimizations if the build machine supports it.  If run on machine without SSE4.2, there will be [invalid opcode issues](https://github.com/openresty/docker-openresty/issues/39). **Thus all the Docker Hub images require SSE4.2.**  You can [build a custom image from source](BUILDING.md#building-from-source) explicitly without SSE4.2 support, using build arguments like so:
 ```
@@ -235,6 +401,8 @@ docker build -f bionic/Dockerfile --build-arg "RESTY_LUAJIT_OPTIONS=--with-luaji
 * The `1.13.6.2-alpine` is built from `OpenSSL 1.0.2r` because of build issues on Alpine. `1.15.8.1-alpine` and later are built from `OpenSSL 1.1.1` series.
 
 * Windows images must be built from the same version as the host system it runs on.  See [Windows container version compatibility](https://docs.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/version-compatibility).  Our images are currently built from the "Windows Server 2016" series.
+
+* If OpenResty logs do not appear in `docker logs` / `docker compose logs` ([#91](https://github.com/openresty/docker-openresty/issues/91)), the usual causes are: (1) a volume bind-mounted over `/usr/local/openresty/nginx/logs`, which shadows the image's log symlinks and silently sends logging to regular files inside the mount — named volumes are unaffected when Docker's default copy behavior is used, but volumes mounted with the `nocopy` option have the same problem, and the [entrypoint](#docker-entrypoint) warns about this at startup; (2) expecting `error_log ... debug;` output from a regular image — debug-level messages require a `-debug` image, such as `bullseye-debug`; (3) on old docker-compose **v1**, the log stream was lost when a container auto-restarted (e.g. `restart: on-failure` crash-looping until an upstream came up) — the logs still reached `docker logs`, and compose v2 fixed this.
 
 * The `SIGQUIT` signal will be sent to nginx to stop this container, to give it an opportunity to stop gracefully (i.e, finish processing active connections).  The Docker default is `SIGTERM`, which immediately terminates active connections.
 
@@ -320,15 +488,19 @@ $ docker inspect openresty/openresty:1.17.8.1-0-bionic | jq '.[].Config.Labels'
 Docker CMD
 ==========
 
+See also [Docker Entrypoint](#docker-entrypoint): since `1.31.1.1-3`, Linux images define an `ENTRYPOINT` that runs scripts in `/docker-entrypoint.d/` before `exec`ing the command when it is `openresty`/`nginx` (and variants).  The default `CMD` remains a full OpenResty invocation with `-g "daemon off;"`.
+
 The `-g "daemon off;"` directive is used in the Dockerfile CMD to keep the Nginx daemon running after container creation. If this directive is added to the nginx.conf, then the `docker run` should explicitly invoke `openresty` (or `nginx` for `windows` images):
 ```
 docker run [options] openresty/openresty:noble openresty
 ```
 
-Invoke another CMD, for example the `resty` utility, like so:
+Invoking another command (for example the `resty` utility) skips the entrypoint startup scripts and `exec`s that command directly:
 ```
 docker run [options] openresty/openresty:noble resty [script.lua]
 ```
+
+On Linux images, replacing the entrypoint entirely (`docker run --entrypoint ...` or Kubernetes `command:`) restores pre-`1.31.1.1-3` behavior; a plain command override (Kubernetes `args:`) still goes through the entrypoint.  See [Docker Entrypoint](#docker-entrypoint) for flag arguments, template rendering, and custom init scripts.
 
 *NOTE* The `alpine` images do not include the packages `perl` and `ncurses`, which is needed by the `resty` utility.
 

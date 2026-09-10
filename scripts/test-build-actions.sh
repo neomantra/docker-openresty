@@ -16,6 +16,18 @@ fi
 
 # Example configurations for different flavors
 case "$FLAVOR" in
+  *-entrypoint)
+    BASE_FLAVOR="${FLAVOR%-entrypoint}"
+    DOCKERFILE="entrypoint/Dockerfile"
+    PLATFORM="linux/$ARCH"
+    BUILD_ARGS="--build-arg RESTY_ENTRYPOINT_BASE=${RESTY_ENTRYPOINT_BASE:-openresty/openresty:$BASE_FLAVOR}"
+    case "$BASE_FLAVOR" in
+      bookworm-debug) VARIANT="-debug" ;;
+      bookworm-valgrind) VARIANT="-valgrind" ;;
+      *) VARIANT="" ;;
+    esac
+    BUILD_ARGS="$BUILD_ARGS --build-arg RESTY_ENTRYPOINT_COMMAND=openresty$VARIANT --build-arg RESTY_PREFIX=/usr/local/openresty$VARIANT"
+    ;;
   alpine)
     DOCKERFILE="alpine/Dockerfile"
     PLATFORM="linux/$ARCH"
@@ -60,4 +72,8 @@ docker buildx build \
   .
 
 echo "✅ Build successful! Image: openresty-test:$FLAVOR-$ARCH"
-echo "Test it with: docker run --rm openresty-test:$FLAVOR-$ARCH openresty -v"
+if [[ "$FLAVOR" == *-entrypoint ]]; then
+  echo "Test it with: SMOKE_PLATFORM=$PLATFORM bash scripts/smoke-test-entrypoint.sh openresty-test:$FLAVOR-$ARCH"
+else
+  echo "Test it with: docker run --rm openresty-test:$FLAVOR-$ARCH openresty -v"
+fi
