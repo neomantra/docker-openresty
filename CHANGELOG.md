@@ -3,6 +3,9 @@
 
 ## Unreleased
 
+ * Gate standard-image tags on runtime tests as well as entrypoint tags. Share
+   production tag/publish/manifest scripts with disposable-registry E2E tests,
+   including mirror-disabled and failed-candidate/no-tag-overwrite checks.
  * Fix the default document root in Bookworm debug and Valgrind images, which
    previously pointed at the normal flavor's prefix and returned HTTP 404.
  * Add optional `-entrypoint` variants for every published Linux flavor, including

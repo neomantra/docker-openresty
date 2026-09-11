@@ -34,189 +34,30 @@ permissions:
   packages: write
 
 jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      base: ${{ steps.matrix.outputs.base }}
+      fat: ${{ steps.matrix.outputs.fat }}
+      base-flavors: ${{ steps.matrix.outputs.base-flavors }}
+      fat-flavors: ${{ steps.matrix.outputs.fat-flavors }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: matrix
+        run: |
+          {
+            echo "base=$(jq -c '.base' .github/build-matrix.json)"
+            echo "fat=$(jq -c '.fat' .github/build-matrix.json)"
+            echo "base-flavors=$(jq -c '{flavor: [.base.include[].flavor] | unique}' .github/build-matrix.json)"
+            echo "fat-flavors=$(jq -c '{flavor: [.fat.include[].flavor] | unique}' .github/build-matrix.json)"
+          } >> "$GITHUB_OUTPUT"
+
   build:
+    needs: matrix
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          # --- Alma ---
-          - flavor: alma
-            arch: amd64
-            dockerfile: alma/Dockerfile
-            platforms: linux/amd64
-          - flavor: alma
-            arch: arm64
-            dockerfile: alma/Dockerfile
-            platforms: linux/arm64
-          - flavor: alma
-            arch: s390x
-            dockerfile: alma/Dockerfile
-            platforms: linux/s390x
-
-          # --- Alpine ---
-          - flavor: alpine
-            arch: amd64
-            dockerfile: alpine/Dockerfile
-            platforms: linux/amd64
-          - flavor: alpine
-            arch: arm64
-            dockerfile: alpine/Dockerfile
-            platforms: linux/arm64
- 
-          # --- Alpine Slim ---
-          - flavor: alpine-slim
-            arch: amd64
-            dockerfile: alpine/Dockerfile
-            platforms: linux/amd64
-            build-args: RESTY_STRIP_BINARIES=1
-          - flavor: alpine-slim
-            arch: arm64
-            dockerfile: alpine/Dockerfile
-            platforms: linux/arm64
-            build-args: RESTY_STRIP_BINARIES=1
-
-          # -- Alpine APK ---
-          - flavor: alpine-apk
-            arch: amd64
-            dockerfile: alpine-apk/Dockerfile
-            platforms: linux/amd64
-          - flavor: alpine-apk
-            arch: arm64
-            dockerfile: alpine-apk/Dockerfile
-            platforms: linux/arm64
-
-          # --- Rocky Linux ---
-          - flavor: rocky
-            arch: amd64
-            dockerfile: fedora/Dockerfile
-            platforms: linux/amd64
-            build-args: |
-              RESTY_IMAGE_BASE=rockylinux/rockylinux
-              RESTY_IMAGE_TAG=9.6
-              RESTY_YUM_REPO=https://openresty.org/package/rocky/openresty2.repo
-              RESTY_RPM_DIST=el9
-              RESTY_DNF_NO_REPOFILE=1
-          - flavor: rocky
-            arch: arm64
-            dockerfile: fedora/Dockerfile
-            platforms: linux/arm64
-            build-args: |
-              RESTY_IMAGE_BASE=rockylinux/rockylinux
-              RESTY_IMAGE_TAG=9.6
-              RESTY_YUM_REPO=https://openresty.org/package/rocky/openresty2.repo
-              RESTY_RPM_DIST=el9
-              RESTY_RPM_ARCH=aarch64
-              RESTY_DNF_NO_REPOFILE=1
-          # --- Fedora ---
-          # Note: fedora-aarch64 is commented out in Travis CI
-          - flavor: fedora
-            arch: amd64
-            dockerfile: fedora/Dockerfile
-            platforms: linux/amd64
-          # --- Debian Bookworm ---
-          - flavor: bookworm
-            arch: amd64
-            dockerfile: bookworm/Dockerfile
-            platforms: linux/amd64
-          - flavor: bookworm
-            arch: arm64
-            dockerfile: bookworm/Dockerfile
-            platforms: linux/arm64
-            build-args: |
-              RESTY_APT_REPO=https://openresty.org/package/arm64/debian
-              RESTY_APT_ARCH=arm64
-
-          # --- Debian Bookworm Buildpack ---
-          - flavor: bookworm-buildpack
-            arch: amd64
-            dockerfile: bookworm/Dockerfile.buildpack
-            platforms: linux/amd64
-          - flavor: bookworm-buildpack
-            arch: arm64
-            dockerfile: bookworm/Dockerfile.buildpack
-            platforms: linux/arm64
-            build-args: |
-              RESTY_APT_REPO=https://openresty.org/package/arm64/debian
-              RESTY_APT_ARCH=arm64
-
-          # --- Debian Bookworm Debug ---
-          - flavor: bookworm-debug
-            arch: amd64
-            dockerfile: bookworm/Dockerfile.debug
-            platforms: linux/amd64
-          - flavor: bookworm-debug
-            arch: arm64
-            dockerfile: bookworm/Dockerfile.debug
-            platforms: linux/arm64
-            build-args: |
-              RESTY_APT_REPO=https://openresty.org/package/arm64/debian
-              RESTY_APT_ARCH=arm64
-
-          # --- Debian Bookworm Valgrind ---
-          - flavor: bookworm-valgrind
-            arch: amd64
-            dockerfile: bookworm/Dockerfile.valgrind
-            platforms: linux/amd64
-          - flavor: bookworm-valgrind
-            arch: arm64
-            dockerfile: bookworm/Dockerfile.valgrind
-            platforms: linux/arm64
-            build-args: |
-              RESTY_APT_REPO=https://openresty.org/package/arm64/debian
-              RESTY_APT_ARCH=arm64
-
-          # --- Ubuntu Jammy ---
-          - flavor: jammy
-            arch: amd64
-            dockerfile: jammy/Dockerfile
-            platforms: linux/amd64
-          - flavor: jammy
-            arch: arm64
-            dockerfile: jammy/Dockerfile
-            platforms: linux/arm64
-          - flavor: jammy
-            arch: s390x
-            dockerfile: jammy/Dockerfile
-            platforms: linux/s390x
-
-          # --- Ubuntu Noble ---
-          - flavor: noble
-            arch: amd64
-            dockerfile: noble/Dockerfile
-            platforms: linux/amd64
-          - flavor: noble
-            arch: arm64
-            dockerfile: noble/Dockerfile
-            platforms: linux/arm64
-          - flavor: noble
-            arch: s390x
-            dockerfile: noble/Dockerfile
-            platforms: linux/s390x
-
-          # --- Ubuntu Resolute ---
-          - flavor: resolute
-            arch: amd64
-            dockerfile: resolute/Dockerfile
-            platforms: linux/amd64
-          - flavor: resolute
-            arch: arm64
-            dockerfile: resolute/Dockerfile
-            platforms: linux/arm64
-          - flavor: resolute
-            arch: s390x
-            dockerfile: resolute/Dockerfile
-            platforms: linux/s390x
-
-          # --- RestyRepo (OpenResty built fully from GitHub source) ---
-          - flavor: restyrepo
-            arch: amd64
-            dockerfile: restyrepo/Dockerfile
-            platforms: linux/amd64
-          - flavor: restyrepo
-            arch: arm64
-            dockerfile: restyrepo/Dockerfile
-            platforms: linux/arm64
+      matrix: ${{ fromJSON(needs.matrix.outputs.base) }}
 
     steps:
       - name: Checkout
@@ -243,21 +84,15 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: ./.github/actions/image-metadata
         with:
-          images: |
-            ${{ env.GHCR_IMAGE }}
-          flavor: |
-            latest=false
-          tags: |
-            type=raw,value=${{ matrix.flavor }}-${{ matrix.arch }},enable=${{ github.ref == 'refs/heads/master' }}
-            type=ref,event=tag,suffix=-${{ matrix.flavor }}-${{ matrix.arch }}
-            type=match,pattern=^(.*)-[0-9]+$,group=1,suffix=-${{ matrix.flavor }}-${{ matrix.arch }}
-            type=match,pattern=^([0-9]+\.[0-9]+)\..*-[0-9]+$,group=1,suffix=-${{ matrix.flavor }}-${{ matrix.arch }}
+          image: ${{ env.GHCR_IMAGE }}
+          flavor: ${{ matrix.flavor }}
+          arch: ${{ matrix.arch }}
 
-      - name: Build and push
+      - name: Build candidate digest
         id: build
         uses: docker/build-push-action@v7
         with:
@@ -265,20 +100,19 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platforms }}
           build-args: ${{ matrix.build-args }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          outputs: type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
 
-      # Docker Hub mirror push - separate step
-      - name: Tag and Push to Docker Hub Mirror
-        if: vars.ENABLE_DOCKERHUB_MIRROR == 'true'
-        run: |
-          echo "${{ steps.meta.outputs.tags }}" | while read -r TAG; do
-            if [ -n "$TAG" ]; then
-              DOCKERHUB_TAG=$(echo "$TAG" | sed "s|${{ env.GHCR_IMAGE }}|${{ env.DOCKERHUB_IMAGE }}|")
-              docker buildx imagetools create -t "$DOCKERHUB_TAG" "$TAG"
-            fi
-          done
+      - name: Test and publish standard image
+        env:
+          SOURCE: ${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }}
+          PRIMARY_IMAGE: ${{ env.GHCR_IMAGE }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          MIRROR_IMAGE: ${{ env.DOCKERHUB_IMAGE }}
+          MIRROR_ENABLED: ${{ vars.ENABLE_DOCKERHUB_MIRROR }}
+          SMOKE_PLATFORM: ${{ matrix.platforms }}
+          FLAVOR: ${{ matrix.flavor }}
+        run: bash scripts/test-and-publish.sh "$SOURCE" "$FLAVOR" standard
 
       - name: Build and publish entrypoint variant
         uses: ./.github/actions/build-entrypoint
@@ -292,25 +126,10 @@ jobs:
           mirror-enabled: ${{ vars.ENABLE_DOCKERHUB_MIRROR }}
 
   manifest:
-    needs: build
+    needs: [matrix, build]
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        flavor:
-          - alma
-          - alpine
-          - alpine-slim
-          - alpine-apk
-          - rocky
-          - fedora
-          - bookworm
-          - bookworm-buildpack
-          - bookworm-debug
-          - bookworm-valgrind
-          - jammy
-          - noble
-          - resolute
-          - restyrepo
+      matrix: ${{ fromJSON(needs.matrix.outputs.base-flavors) }}
 
     steps:
       - name: Checkout
@@ -339,33 +158,11 @@ jobs:
         run: ./scripts/create-manifest.sh "${{ matrix.flavor }}-entrypoint" "${{ env.GHCR_IMAGE }}" "${{ env.DOCKERHUB_IMAGE }}" "${{ vars.ENABLE_DOCKERHUB_MIRROR }}"
 
   build-fat:
-    needs: manifest
+    needs: [matrix, manifest]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - flavor: bookworm-fat
-            base_flavor: bookworm
-            arch: amd64
-            dockerfile: bookworm/Dockerfile.fat
-            platforms: linux/amd64
-          - flavor: bookworm-fat
-            base_flavor: bookworm
-            arch: arm64
-            dockerfile: bookworm/Dockerfile.fat
-            platforms: linux/arm64
-          
-          - flavor: alpine-fat
-            base_flavor: alpine
-            arch: amd64
-            dockerfile: alpine/Dockerfile.fat
-            platforms: linux/amd64
-          - flavor: alpine-fat
-            base_flavor: alpine
-            arch: arm64
-            dockerfile: alpine/Dockerfile.fat
-            platforms: linux/arm64
+      matrix: ${{ fromJSON(needs.matrix.outputs.fat) }}
 
     steps:
       - name: Checkout
@@ -401,47 +198,40 @@ jobs:
           fi
           
           BASE_TAG="${TAG_PREFIX}${{ matrix.base_flavor }}"
-          echo "RESTY_FAT_IMAGE_TAG=$BASE_TAG" >> $GITHUB_ENV
-          echo "RESTY_FAT_IMAGE_BASE=${{ env.GHCR_IMAGE }}" >> $GITHUB_ENV
+          echo "RESTY_FAT_IMAGE_TAG=$BASE_TAG" >> "$GITHUB_ENV"
+          echo "RESTY_FAT_IMAGE_BASE=${{ env.GHCR_IMAGE }}" >> "$GITHUB_ENV"
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: ./.github/actions/image-metadata
         with:
-          images: |
-            ${{ env.GHCR_IMAGE }}
-          flavor: |
-            latest=false
-          tags: |
-            type=raw,value=${{ matrix.flavor }}-${{ matrix.arch }},enable=${{ github.ref == 'refs/heads/master' }}
-            type=ref,event=tag,suffix=-${{ matrix.flavor }}-${{ matrix.arch }}
-            type=match,pattern=^(.*)-[0-9]+$,group=1,suffix=-${{ matrix.flavor }}-${{ matrix.arch }}
-            type=match,pattern=^([0-9]+\.[0-9]+)\..*-[0-9]+$,group=1,suffix=-${{ matrix.flavor }}-${{ matrix.arch }}
+          image: ${{ env.GHCR_IMAGE }}
+          flavor: ${{ matrix.flavor }}
+          arch: ${{ matrix.arch }}
 
-      - name: Build and push
+      - name: Build candidate digest
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platforms }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          outputs: type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             RESTY_FAT_IMAGE_BASE=${{ env.RESTY_FAT_IMAGE_BASE }}
             RESTY_FAT_IMAGE_TAG=${{ env.RESTY_FAT_IMAGE_TAG }}
 
-      # Mirror registry push
-      - name: Tag and Push to Mirror
-        if: vars.ENABLE_DOCKERHUB_MIRROR == 'true'
-        run: |
-          echo "${{ steps.meta.outputs.tags }}" | while read -r TAG; do
-            if [ -n "$TAG" ]; then
-              MIRROR_TAG=$(echo "$TAG" | sed "s|${{ env.GHCR_IMAGE }}|${{ env.DOCKERHUB_IMAGE }}|")
-              docker buildx imagetools create -t "$MIRROR_TAG" "$TAG"
-            fi
-          done
+      - name: Test and publish standard image
+        env:
+          SOURCE: ${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }}
+          PRIMARY_IMAGE: ${{ env.GHCR_IMAGE }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          MIRROR_IMAGE: ${{ env.DOCKERHUB_IMAGE }}
+          MIRROR_ENABLED: ${{ vars.ENABLE_DOCKERHUB_MIRROR }}
+          SMOKE_PLATFORM: ${{ matrix.platforms }}
+          FLAVOR: ${{ matrix.flavor }}
+        run: bash scripts/test-and-publish.sh "$SOURCE" "$FLAVOR" standard
 
       - name: Build and publish entrypoint variant
         uses: ./.github/actions/build-entrypoint
@@ -580,13 +370,11 @@ jobs:
   #         fi
 
   manifest-fat:
-    needs: build-fat
+    needs: [matrix, build-fat]
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        flavor:
-          - bookworm-fat
-          - alpine-fat
+      matrix: ${{ fromJSON(needs.matrix.outputs.fat-flavors) }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6

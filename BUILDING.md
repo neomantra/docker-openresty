@@ -230,14 +230,23 @@ docker build --build-arg RESTY_VERSION="1.27.1.2" -f windows/Dockerfile .
 GitHub Actions
 ==============
 
-The standard Linux images keep their existing Dockerfiles and defaults. Each CI
+The standard Linux images retain their existing startup model. Each CI
 job also builds an optional entrypoint variant from that job's base-image digest,
-using the shared [entrypoint/Dockerfile](entrypoint/Dockerfile). Entrypoint tags
-are published only after startup and template smoke tests pass on that architecture.
+using the shared [entrypoint/Dockerfile](entrypoint/Dockerfile). Both standard and
+entrypoint images are pushed as untagged candidate digests, tested, and only then
+given public tags. Tests exercise the stock default page, Lua execution, and actual
+access/error log delivery. Entrypoint variants additionally test hooks, templates,
+and non-root/read-only startup.
 Multi-architecture manifests and the optional Docker Hub mirror follow the same
 flavor/version conventions as the base images; `latest` remains the standard image.
 
 The GitHub Actions to build is located in the [`.github/workflows/docker-publish.yml`](./.github/workflows/docker-publish.yml) file.
+
+Builds, PR validation, and manifest generation share
+[`.github/build-matrix.json`](.github/build-matrix.json): 16 Linux flavors and
+35 flavor/architecture combinations. Add or remove matrix entries there, not in
+separate workflow lists. The publishing workflow accepts master or release tags;
+use the validation workflow for feature branches.
 
 | Environment Variable | Description |
 |:---------------------|:----------- |

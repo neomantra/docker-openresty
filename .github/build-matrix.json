@@ -1,0 +1,232 @@
+{
+  "base": {
+    "include": [
+      {
+        "flavor": "alma",
+        "arch": "amd64",
+        "dockerfile": "alma/Dockerfile",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "alma",
+        "arch": "arm64",
+        "dockerfile": "alma/Dockerfile",
+        "platforms": "linux/arm64"
+      },
+      {
+        "flavor": "alma",
+        "arch": "s390x",
+        "dockerfile": "alma/Dockerfile",
+        "platforms": "linux/s390x"
+      },
+      {
+        "flavor": "alpine",
+        "arch": "amd64",
+        "dockerfile": "alpine/Dockerfile",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "alpine",
+        "arch": "arm64",
+        "dockerfile": "alpine/Dockerfile",
+        "platforms": "linux/arm64"
+      },
+      {
+        "flavor": "alpine-slim",
+        "arch": "amd64",
+        "dockerfile": "alpine/Dockerfile",
+        "platforms": "linux/amd64",
+        "build-args": "RESTY_STRIP_BINARIES=1"
+      },
+      {
+        "flavor": "alpine-slim",
+        "arch": "arm64",
+        "dockerfile": "alpine/Dockerfile",
+        "platforms": "linux/arm64",
+        "build-args": "RESTY_STRIP_BINARIES=1"
+      },
+      {
+        "flavor": "alpine-apk",
+        "arch": "amd64",
+        "dockerfile": "alpine-apk/Dockerfile",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "alpine-apk",
+        "arch": "arm64",
+        "dockerfile": "alpine-apk/Dockerfile",
+        "platforms": "linux/arm64"
+      },
+      {
+        "flavor": "rocky",
+        "arch": "amd64",
+        "dockerfile": "fedora/Dockerfile",
+        "platforms": "linux/amd64",
+        "build-args": "RESTY_IMAGE_BASE=rockylinux/rockylinux\nRESTY_IMAGE_TAG=9.6\nRESTY_YUM_REPO=https://openresty.org/package/rocky/openresty2.repo\nRESTY_RPM_DIST=el9\nRESTY_DNF_NO_REPOFILE=1\n"
+      },
+      {
+        "flavor": "rocky",
+        "arch": "arm64",
+        "dockerfile": "fedora/Dockerfile",
+        "platforms": "linux/arm64",
+        "build-args": "RESTY_IMAGE_BASE=rockylinux/rockylinux\nRESTY_IMAGE_TAG=9.6\nRESTY_YUM_REPO=https://openresty.org/package/rocky/openresty2.repo\nRESTY_RPM_DIST=el9\nRESTY_RPM_ARCH=aarch64\nRESTY_DNF_NO_REPOFILE=1\n"
+      },
+      {
+        "flavor": "fedora",
+        "arch": "amd64",
+        "dockerfile": "fedora/Dockerfile",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "bookworm",
+        "arch": "amd64",
+        "dockerfile": "bookworm/Dockerfile",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "bookworm",
+        "arch": "arm64",
+        "dockerfile": "bookworm/Dockerfile",
+        "platforms": "linux/arm64",
+        "build-args": "RESTY_APT_REPO=https://openresty.org/package/arm64/debian\nRESTY_APT_ARCH=arm64\n"
+      },
+      {
+        "flavor": "bookworm-buildpack",
+        "arch": "amd64",
+        "dockerfile": "bookworm/Dockerfile.buildpack",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "bookworm-buildpack",
+        "arch": "arm64",
+        "dockerfile": "bookworm/Dockerfile.buildpack",
+        "platforms": "linux/arm64",
+        "build-args": "RESTY_APT_REPO=https://openresty.org/package/arm64/debian\nRESTY_APT_ARCH=arm64\n"
+      },
+      {
+        "flavor": "bookworm-debug",
+        "arch": "amd64",
+        "dockerfile": "bookworm/Dockerfile.debug",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "bookworm-debug",
+        "arch": "arm64",
+        "dockerfile": "bookworm/Dockerfile.debug",
+        "platforms": "linux/arm64",
+        "build-args": "RESTY_APT_REPO=https://openresty.org/package/arm64/debian\nRESTY_APT_ARCH=arm64\n"
+      },
+      {
+        "flavor": "bookworm-valgrind",
+        "arch": "amd64",
+        "dockerfile": "bookworm/Dockerfile.valgrind",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "bookworm-valgrind",
+        "arch": "arm64",
+        "dockerfile": "bookworm/Dockerfile.valgrind",
+        "platforms": "linux/arm64",
+        "build-args": "RESTY_APT_REPO=https://openresty.org/package/arm64/debian\nRESTY_APT_ARCH=arm64\n"
+      },
+      {
+        "flavor": "jammy",
+        "arch": "amd64",
+        "dockerfile": "jammy/Dockerfile",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "jammy",
+        "arch": "arm64",
+        "dockerfile": "jammy/Dockerfile",
+        "platforms": "linux/arm64"
+      },
+      {
+        "flavor": "jammy",
+        "arch": "s390x",
+        "dockerfile": "jammy/Dockerfile",
+        "platforms": "linux/s390x"
+      },
+      {
+        "flavor": "noble",
+        "arch": "amd64",
+        "dockerfile": "noble/Dockerfile",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "noble",
+        "arch": "arm64",
+        "dockerfile": "noble/Dockerfile",
+        "platforms": "linux/arm64"
+      },
+      {
+        "flavor": "noble",
+        "arch": "s390x",
+        "dockerfile": "noble/Dockerfile",
+        "platforms": "linux/s390x"
+      },
+      {
+        "flavor": "resolute",
+        "arch": "amd64",
+        "dockerfile": "resolute/Dockerfile",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "resolute",
+        "arch": "arm64",
+        "dockerfile": "resolute/Dockerfile",
+        "platforms": "linux/arm64"
+      },
+      {
+        "flavor": "resolute",
+        "arch": "s390x",
+        "dockerfile": "resolute/Dockerfile",
+        "platforms": "linux/s390x"
+      },
+      {
+        "flavor": "restyrepo",
+        "arch": "amd64",
+        "dockerfile": "restyrepo/Dockerfile",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "restyrepo",
+        "arch": "arm64",
+        "dockerfile": "restyrepo/Dockerfile",
+        "platforms": "linux/arm64"
+      }
+    ]
+  },
+  "fat": {
+    "include": [
+      {
+        "flavor": "bookworm-fat",
+        "base_flavor": "bookworm",
+        "arch": "amd64",
+        "dockerfile": "bookworm/Dockerfile.fat",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "bookworm-fat",
+        "base_flavor": "bookworm",
+        "arch": "arm64",
+        "dockerfile": "bookworm/Dockerfile.fat",
+        "platforms": "linux/arm64"
+      },
+      {
+        "flavor": "alpine-fat",
+        "base_flavor": "alpine",
+        "arch": "amd64",
+        "dockerfile": "alpine/Dockerfile.fat",
+        "platforms": "linux/amd64"
+      },
+      {
+        "flavor": "alpine-fat",
+        "base_flavor": "alpine",
+        "arch": "arm64",
+        "dockerfile": "alpine/Dockerfile.fat",
+        "platforms": "linux/arm64"
+      }
+    ]
+  }
+}

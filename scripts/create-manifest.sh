@@ -30,52 +30,25 @@ if [[ -f "LATEST_SERIES" ]]; then
 fi
 RESTY_LATEST_SERIES="${RESTY_LATEST_SERIES:-1.29}"
 
-# Define architectures for each flavor
-# Default to amd64 and arm64, can be overridden by RESTY_ARCHS env var
-ARCHS="${RESTY_ARCHS:-amd64 arm64}"
+# Keep build, validation, and manifest architectures in one source of truth.
+SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
 BASE_FLAVOR="${FLAVOR%-entrypoint}"
-
-# Add s390x for flavors that build it (must match the workflow build matrix)
-S390X_FLAVORS=("alma" "jammy" "noble" "resolute")
-for s390x_flavor in "${S390X_FLAVORS[@]}"; do
-    if [[ "$BASE_FLAVOR" == "$s390x_flavor" ]]; then
-        ARCHS="$ARCHS s390x"
-        break
-    fi
-done
-
-# Fedora only supports amd64 in this setup
-if [[ "$BASE_FLAVOR" == "fedora" ]]; then
-  ARCHS="amd64"
+ARCHS="${RESTY_ARCHS:-}"
+if [[ -z "$ARCHS" ]]; then
+    ARCHS=$(jq -r --arg flavor "$BASE_FLAVOR" \
+        '[((.base.include + .fat.include)[]) | select(.flavor == $flavor) | .arch] | join(" ")' \
+        "$SCRIPT_DIR/../.github/build-matrix.json")
+    [[ -n "$ARCHS" ]] || { echo "Unknown flavor: $FLAVOR" >&2; exit 1; }
 fi
 
 echo "Creating manifest for flavor: $FLAVOR (Architectures: $ARCHS)"
 
 # Construct tag prefixes (handling git tags and aliases)
 declare -a PREFIXES=()
-if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-    TAG_NAME="$GITHUB_REF_NAME"
-    PREFIXES+=("${TAG_NAME}-")
-    
-    # Aliasing logic: Matches tags ending in a revision number (e.g. 1.2.1-1 -> 1.2.1, 1.2.1-11 -> 1.2.1)
-    # If the tag matches the pattern (.*)-[0-9]+$, we create an alias for the base (group 1).
-    # This must match the metadata-action pattern in .github/workflows/docker-publish.yml
-    if [[ "$TAG_NAME" =~ ^(.*)-[0-9]+$ ]]; then
-        TAG_BASE="${BASH_REMATCH[1]}"
-        if [[ "$TAG_BASE" != "$TAG_NAME" ]]; then
-           PREFIXES+=("${TAG_BASE}-")
-        fi
-    fi
-
-    # Also publish moving major.minor aliases (e.g. 1.31-alpine) for the
-    # current OpenResty release series.
-    if [[ "$TAG_NAME" =~ ^([0-9]+\.[0-9]+)\..*-[0-9]+$ ]]; then
-        PREFIXES+=("${BASH_REMATCH[1]}-")
-    fi
-else
-    # For master branch or other non-tags, we use an empty prefix to just tag as "flavor"
-    PREFIXES+=("")
-fi
+prefixes=$(bash "$SCRIPT_DIR/tag-prefixes.sh")
+while IFS= read -r prefix; do
+    PREFIXES+=("$prefix")
+done <<< "$prefixes"
 
 # Loop through each calculated tag prefix and create manifests
 for TAG_PREFIX in "${PREFIXES[@]}"; do

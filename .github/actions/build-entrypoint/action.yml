@@ -41,15 +41,11 @@ runs:
 
     - name: Extract entrypoint metadata
       id: meta
-      uses: docker/metadata-action@v6
+      uses: ./.github/actions/image-metadata
       with:
-        images: ${{ inputs.image }}
-        flavor: latest=false
-        tags: |
-          type=raw,value=${{ inputs.flavor }}-entrypoint-${{ inputs.arch }},enable=${{ github.ref == 'refs/heads/master' }}
-          type=ref,event=tag,suffix=-${{ inputs.flavor }}-entrypoint-${{ inputs.arch }}
-          type=match,pattern=^(.*)-[0-9]+$,group=1,suffix=-${{ inputs.flavor }}-entrypoint-${{ inputs.arch }}
-          type=match,pattern=^([0-9]+\.[0-9]+)\..*-[0-9]+$,group=1,suffix=-${{ inputs.flavor }}-entrypoint-${{ inputs.arch }}
+        image: ${{ inputs.image }}
+        flavor: ${{ inputs.flavor }}-entrypoint
+        arch: ${{ inputs.arch }}
 
     - name: Build and push candidate digest
       id: build
@@ -65,29 +61,14 @@ runs:
         labels: ${{ steps.meta.outputs.labels }}
         outputs: type=image,name=${{ inputs.image }},push-by-digest=true,name-canonical=true,push=true
 
-    - name: Test entrypoint and non-root startup
-      shell: bash
-      env:
-        IMAGE: ${{ inputs.image }}@${{ steps.build.outputs.digest }}
-        SMOKE_PLATFORM: ${{ inputs.platform }}
-      run: |
-        docker pull --platform "$SMOKE_PLATFORM" "$IMAGE"
-        bash ./scripts/smoke-test-entrypoint.sh "$IMAGE"
-
-    - name: Publish tested entrypoint tags
+    - name: Test and publish entrypoint tags
       shell: bash
       env:
         SOURCE: ${{ inputs.image }}@${{ steps.build.outputs.digest }}
+        FLAVOR: ${{ inputs.flavor }}
         TAGS: ${{ steps.meta.outputs.tags }}
         PRIMARY_IMAGE: ${{ inputs.image }}
         MIRROR_IMAGE: ${{ inputs.mirror-image }}
         MIRROR_ENABLED: ${{ inputs.mirror-enabled }}
-      run: |
-        while IFS= read -r tag; do
-          [ -n "$tag" ] || continue
-          docker buildx imagetools create -t "$tag" "$SOURCE"
-          if [[ "$MIRROR_ENABLED" == 'true' ]]; then
-            mirror_tag="${MIRROR_IMAGE}${tag#"$PRIMARY_IMAGE"}"
-            docker buildx imagetools create -t "$mirror_tag" "$SOURCE"
-          fi
-        done <<< "$TAGS"
+        SMOKE_PLATFORM: ${{ inputs.platform }}
+      run: bash scripts/test-and-publish.sh "$SOURCE" "$FLAVOR" entrypoint
