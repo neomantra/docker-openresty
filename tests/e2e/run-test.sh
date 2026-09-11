@@ -112,9 +112,13 @@ for flavor in "$@"; do
             parent_row=$(jq -ec --arg flavor "$parent" --arg arch "$arch" '.base.include[] | select(.flavor == $flavor and .arch == $arch)' "$MATRIX")
             build_row "$parent_row"
             publish "$parent" standard
+            # Production builds fat images FROM the parent's release/master
+            # manifest tag, so assemble that manifest and resolve the base the
+            # same way instead of pinning the freshly built digest.
+            RESTY_ARCHS="$arch" bash scripts/create-manifest.sh "$parent" "$PRIMARY_IMAGE" "$MIRROR_IMAGE" true
             build_candidate "$(jq -r '.dockerfile' <<< "$row")" \
                 --build-arg "RESTY_FAT_IMAGE_BASE=$PRIMARY_IMAGE" \
-                --build-arg "RESTY_FAT_IMAGE_TAG=$parent-$arch@$DIGEST"
+                --build-arg "RESTY_FAT_IMAGE_TAG=$(bash scripts/fat-base-tag.sh "$parent")"
         else
             build_row "$row"
         fi

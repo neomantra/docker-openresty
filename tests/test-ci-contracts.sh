@@ -42,6 +42,8 @@ output=$(RESTY_ARCHS=amd64 bash scripts/create-manifest.sh alma-entrypoint "$pri
 [[ "$output" == *'Architectures: amd64)'* && "$output" != *s390x* && "$output" != *"$mirror"* ]]
 tags=$(GITHUB_REF_TYPE=branch GITHUB_REF_NAME=master bash scripts/image-tags.sh "$primary" bookworm-entrypoint arm64)
 [[ "$tags" == "$primary:bookworm-entrypoint-arm64" ]]
+[[ $(bash scripts/fat-base-tag.sh bookworm) == "$GITHUB_REF_NAME-bookworm" ]]
+[[ $(GITHUB_REF_TYPE=branch GITHUB_REF_NAME=master bash scripts/fat-base-tag.sh alpine) == alpine ]]
 if GITHUB_REF_TYPE=branch GITHUB_REF_NAME=feature bash scripts/image-tags.sh "$primary" bookworm amd64; then
     echo 'Feature branch was allowed to publish production aliases' >&2; exit 1
 fi

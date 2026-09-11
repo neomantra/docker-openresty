@@ -313,7 +313,8 @@ pull requests and manual dispatch with read-only repository permissions and no
 production registry credentials. Each flavor/architecture row of the shared
 matrix runs as its own job, building from this checkout and invoking the same
 registry E2E harness used locally. Fat rows first build and test their
-corresponding standard base. amd64 and arm64 rows run natively on hosted
+corresponding standard base, assemble its manifest, and build the fat image
+from that tag exactly as production does. amd64 and arm64 rows run natively on hosted
 runners; s390x executes through QEMU. Emulated runtime coverage is not a claim
 of testing on native s390x hardware. Documentation-only changes skip the workflow.
 
@@ -334,8 +335,8 @@ bash tests/e2e/run-test.sh bookworm alpine-apk
 E2E_ARCHS=arm64 bash tests/e2e/run-test.sh bookworm-fat
 ```
 
-Production and E2E share `image-tags.sh`, `test-and-publish.sh`, and
-`create-manifest.sh`; the publishing workflow pushes the tags `image-tags.sh`
+Production and E2E share `image-tags.sh`, `test-and-publish.sh`,
+`fat-base-tag.sh`, and `create-manifest.sh`; the publishing workflow pushes the tags `image-tags.sh`
 emits verbatim, and `docker/metadata-action` only derives OCI labels. The harness verifies digest-pinned derivation and inherited
 base layers; release/master aliases; multi-platform manifests and pulls from both
 registries; `latest` remaining standard Bookworm; and mirror-disabled behavior.

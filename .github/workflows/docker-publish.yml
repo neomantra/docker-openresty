@@ -191,15 +191,11 @@ jobs:
 
       - name: Determine Fat Base Image
         id: fat-base
+        env:
+          BASE_FLAVOR: ${{ matrix.base_flavor }}
         run: |
-          TAG_PREFIX=""
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-             TAG_PREFIX="${{ github.ref_name }}-"
-          fi
-          
-          BASE_TAG="${TAG_PREFIX}${{ matrix.base_flavor }}"
-          echo "RESTY_FAT_IMAGE_TAG=$BASE_TAG" >> "$GITHUB_ENV"
-          echo "RESTY_FAT_IMAGE_BASE=${{ env.GHCR_IMAGE }}" >> "$GITHUB_ENV"
+          echo "RESTY_FAT_IMAGE_TAG=$(bash scripts/fat-base-tag.sh "$BASE_FLAVOR")" >> "$GITHUB_ENV"
+          echo "RESTY_FAT_IMAGE_BASE=$GHCR_IMAGE" >> "$GITHUB_ENV"
 
       - name: Extract metadata
         id: meta
