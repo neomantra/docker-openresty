@@ -2,6 +2,10 @@
 # Exercises the derived layer without publishing or changing the base image.
 # Usage: bash scripts/smoke-test-entrypoint.sh IMAGE
 # SMOKE_PLATFORM defaults to linux/amd64; CI supplies each matrix platform.
+# SMOKE_RETRIES is the readiness budget shared with smoke-test-nonroot.sh
+# (default 120; emulated platforms start slowly). SMOKE_TIMEOUT bounds each
+# foreground docker run in seconds (default 600) when a timeout command exists,
+# so a hung emulated invocation fails fast instead of consuming the whole job.
 set -euo pipefail
 
 IMAGE="${1:?Usage: smoke-test-entrypoint.sh IMAGE}"
@@ -10,7 +14,17 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf -- "$TEST_DIR"' EXIT
 NAME="entrypoint-smoke-${TEST_DIR##*.}-$$"
+export SMOKE_RETRIES="${SMOKE_RETRIES:-120}"
 RUN=(docker run --rm --platform "$PLATFORM" --network none)
+if command -v timeout >/dev/null 2>&1; then
+    RUN=(timeout "${SMOKE_TIMEOUT:-600}" "${RUN[@]}")
+fi
+# Negative checks must fail for the expected reason, never by timing out (124).
+expect_failure() {
+    local status=0
+    result=$("${RUN[@]}" "$@" 2>&1) || status=$?
+    [[ $status -ne 0 && $status -ne 124 ]]
+}
 SERVER_COMMAND=()
 COMMAND=$("${RUN[@]}" "$IMAGE" printenv RESTY_ENTRYPOINT_COMMAND)
 if [[ "$COMMAND" == openresty-valgrind ]]; then
@@ -61,10 +75,10 @@ result=$("${RUN[@]}" -e NGINX_ENTRYPOINT_QUIET_LOGS=1 \
 result=$("${RUN[@]}" -v "$TEST_DIR/fail.sh:/docker-entrypoint.d/99-fail.sh:ro" \
     "$IMAGE" sh -c 'echo bypassed')
 [[ "$result" == bypassed ]]
-if "${RUN[@]}" -v "$TEST_DIR/fail.sh:/docker-entrypoint.d/99-fail.sh:ro" "$IMAGE" -t; then
-    echo 'Failing startup hook did not stop startup' >&2
+expect_failure -v "$TEST_DIR/fail.sh:/docker-entrypoint.d/99-fail.sh:ro" "$IMAGE" -t || {
+    echo "Failing startup hook did not stop startup: $result" >&2
     exit 1
-fi
+}
 
 mkdir "$TEST_DIR/templates"
 cat > "$TEST_DIR/templates/default.conf.template" <<'EOF'
@@ -90,20 +104,20 @@ EOF
 
 # Existing stream configuration must survive, with an explicit startup failure.
 printf '%s\n' '# sentinel' > "$TEST_DIR/stream.main"
-if result=$("${RUN[@]}" -e ENTRYPOINT_TEST_VALUE=rendered -e ENTRYPOINT_TEST_PORT=9 \
+expect_failure -e ENTRYPOINT_TEST_VALUE=rendered -e ENTRYPOINT_TEST_PORT=9 \
     -v "$TEST_DIR/templates:/etc/nginx/templates:ro" \
-    -v "$TEST_DIR/stream.main:/etc/nginx/conf.d/stream.main:ro" "$IMAGE" -t 2>&1); then
-    echo 'Existing stream.main was not rejected' >&2
+    -v "$TEST_DIR/stream.main:/etc/nginx/conf.d/stream.main:ro" "$IMAGE" -t || {
+    echo "Existing stream.main was not rejected: $result" >&2
     exit 1
-fi
+}
 [[ "$result" == *'refusing to overwrite'* ]]
 [[ $(< "$TEST_DIR/stream.main") == '# sentinel' ]]
 
 # Templates on an unwritable rootfs must fail rather than serve stale config.
-if result=$("${RUN[@]}" --user 12345:12345 --read-only \
-    -v "$TEST_DIR/templates:/etc/nginx/templates:ro" "$IMAGE" -t 2>&1); then
-    echo 'Unwritable template destination was not rejected' >&2
+expect_failure --user 12345:12345 --read-only \
+    -v "$TEST_DIR/templates:/etc/nginx/templates:ro" "$IMAGE" -t || {
+    echo "Unwritable template destination was not rejected: $result" >&2
     exit 1
-fi
+}
 [[ "$result" == *'not writable'* ]]
 echo "Entrypoint checks passed: $IMAGE ($PLATFORM)"
