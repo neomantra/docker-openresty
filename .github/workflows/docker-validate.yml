@@ -46,3 +46,22 @@ jobs:
           FLAVOR: ${{ matrix.flavor }}
           E2E_ARCHS: ${{ matrix.arch }}
         run: bash tests/e2e/run-test.sh "$FLAVOR"
+  # Production builds and smoke-tests arm64 under QEMU on amd64 runners and
+  # assembles multi-architecture manifests. The per-row jobs above run arm64
+  # natively and only ever assemble single-source manifests, so cover the
+  # emulated path here with two fast package-based flavors, including Valgrind
+  # under emulation.
+  registry-e2e-multiarch:
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and test every architecture of bookworm and bookworm-valgrind under emulation
+        run: bash tests/e2e/run-test.sh bookworm bookworm-valgrind

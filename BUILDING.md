@@ -314,9 +314,13 @@ production registry credentials. Each flavor/architecture row of the shared
 matrix runs as its own job, building from this checkout and invoking the same
 registry E2E harness used locally. Fat rows first build and test their
 corresponding standard base, assemble its manifest, and build the fat image
-from that tag exactly as production does. amd64 and arm64 rows run natively on hosted
-runners; s390x executes through QEMU. Emulated runtime coverage is not a claim
-of testing on native s390x hardware. Documentation-only changes skip the workflow.
+from that tag exactly as production does. amd64 and arm64 rows run natively on
+hosted runners; s390x executes through QEMU. Because production builds and
+tests arm64 under QEMU on amd64 runners, one additional job runs `bookworm` and
+`bookworm-valgrind` across all of their architectures under emulation, which
+also exercises genuinely multi-architecture manifest assembly. Emulated runtime
+coverage is not a claim of testing on native s390x hardware. Documentation-only
+changes skip the workflow.
 
 The harness starts two registries on random loopback ports and creates a dedicated
 Buildx builder. It cleans up its own containers and builder on exit, leaving any
