@@ -1,0 +1,3 @@
+ARG BASE
+FROM ${BASE}
+COPY --chmod=755 tests/fixtures/fail-entrypoint.sh /docker-entrypoint.d/99-fail.sh

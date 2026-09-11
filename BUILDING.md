@@ -308,7 +308,58 @@ The suite uses disposable containers and dynamically allocated localhost ports.
 End-To-End Tests
 ================
 
-The script [`./tests/e2e/run-test.sh`](./tests/e2e/run-test.sh) starts two local
-registries and uses Act to build Alpine APK and Bookworm base images plus their
-derived entrypoint variants. It verifies both registries and runs the entrypoint
-smoke suite against the mirrored variants.
+The [Docker validation workflow](.github/workflows/docker-validate.yml) runs on
+pull requests and manual dispatch with read-only repository permissions and no
+production registry credentials. Each flavor/architecture row of the shared
+matrix runs as its own job, building from this checkout and invoking the same
+registry E2E harness used locally. Fat rows first build and test their
+corresponding standard base. amd64 and arm64 rows run natively on hosted
+runners; s390x executes through QEMU. Emulated runtime coverage is not a claim
+of testing on native s390x hardware. Documentation-only changes skip the workflow.
+
+The harness starts two registries on random loopback ports and creates a dedicated
+Buildx builder. It cleans up its own containers and builder on exit, leaving any
+existing registries and the selected builder alone. Act is no longer required.
+Prerequisites are Docker with Buildx, Bash, jq, curl, and shasum; foreign
+architectures require binfmt/QEMU support (the PR workflow configures it for s390x).
+
+```bash
+# Fast, offline matrix/tag/manifest checks
+bash tests/test-ci-contracts.sh
+
+# Build and exercise both architectures for these representative flavors
+bash tests/e2e/run-test.sh bookworm alpine-apk
+
+# Limit architectures; the PR workflow runs one architecture per job this way
+E2E_ARCHS=arm64 bash tests/e2e/run-test.sh bookworm-fat
+```
+
+Production and E2E share `image-tags.sh`, `test-and-publish.sh`, and
+`create-manifest.sh`; the publishing workflow pushes the tags `image-tags.sh`
+emits verbatim, and `docker/metadata-action` only derives OCI labels. The harness verifies digest-pinned derivation and inherited
+base layers; release/master aliases; multi-platform manifests and pulls from both
+registries; `latest` remaining standard Bookworm; and mirror-disabled behavior.
+It builds an intentionally broken entrypoint image and proves that a failed test
+neither creates new tags nor overwrites previously tested tags in either registry.
+Candidate digests can exist before testing; public tags cannot.
+
+For runtime-only investigation, an explicit published base can replace the source
+build. This is not full validation of the checkout's base Dockerfile and is never
+used by the PR workflow:
+
+```bash
+E2E_BASE_IMAGE=openresty/openresty:alma E2E_ARCHS=s390x \
+  bash tests/e2e/run-test.sh alma
+```
+
+Standalone runtime tests can also use an already-built image:
+
+```bash
+SMOKE_PLATFORM=linux/arm64 bash scripts/smoke-test-image.sh IMAGE bookworm standard
+SMOKE_PLATFORM=linux/arm64 bash scripts/smoke-test-image.sh IMAGE bookworm entrypoint
+```
+
+Debug images use their flavor-specific document root. Valgrind images are tested
+under Valgrind, including configuration validation before instrumentation for
+entrypoint variants; their direct server invocation is not used as a production
+readiness criterion.

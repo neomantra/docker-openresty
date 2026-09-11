@@ -3,6 +3,10 @@
 
 ## Unreleased
 
+ * Add non-publishing PR validation across the shared Linux build matrix (#125),
+   with HTTP/Lua/logging checks for standard and entrypoint images. Each
+   flavor/architecture row is a separate job; amd64 and arm64 run natively on
+   hosted runners and s390x executes under QEMU.
  * Gate standard-image tags on runtime tests as well as entrypoint tags. Share
    production tag/publish/manifest scripts with disposable-registry E2E tests,
    including mirror-disabled and failed-candidate/no-tag-overwrite checks.

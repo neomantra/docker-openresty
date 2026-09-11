@@ -1,0 +1,48 @@
+name: Docker validation
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: docker-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      rows: ${{ steps.matrix.outputs.rows }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check matrix and tag contracts
+        run: bash tests/test-ci-contracts.sh
+      # One job per flavor/architecture row, mirroring the production build job.
+      # amd64 and arm64 rows run natively on hosted runners; only s390x needs QEMU.
+      - id: matrix
+        run: |
+          echo "rows=$(jq -c '{include: [(.base.include + .fat.include)[] | {flavor, arch, runner: (if .arch == "arm64" then "ubuntu-24.04-arm" else "ubuntu-latest" end)}]}' .github/build-matrix.json)" >> "$GITHUB_OUTPUT"
+  registry-e2e:
+    needs: matrix
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.rows) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v4
+        if: matrix.arch == 's390x'
+        with:
+          platforms: s390x
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and test this row in disposable registries
+        env:
+          FLAVOR: ${{ matrix.flavor }}
+          E2E_ARCHS: ${{ matrix.arch }}
+        run: bash tests/e2e/run-test.sh "$FLAVOR"
