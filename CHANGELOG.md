@@ -7,6 +7,8 @@
    with HTTP/Lua/logging checks for standard and entrypoint images. Each
    flavor/architecture row is a separate job; amd64 and arm64 run natively on
    hosted runners and s390x executes under QEMU.
+ * Build and test arm64 images natively on `ubuntu-24.04-arm` runners instead
+   of under QEMU; only s390x remains emulated.
  * Gate standard-image tags on runtime tests as well as entrypoint tags. Share
    production tag/publish/manifest scripts with disposable-registry E2E tests,
    including mirror-disabled and failed-candidate/no-tag-overwrite checks.

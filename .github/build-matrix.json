@@ -228,5 +228,10 @@
         "platforms": "linux/arm64"
       }
     ]
+  },
+  "runners": {
+    "amd64": "ubuntu-latest",
+    "arm64": "ubuntu-24.04-arm",
+    "s390x": "ubuntu-latest"
   }
 }

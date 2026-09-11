@@ -46,15 +46,15 @@ jobs:
       - id: matrix
         run: |
           {
-            echo "base=$(jq -c '.base' .github/build-matrix.json)"
-            echo "fat=$(jq -c '.fat' .github/build-matrix.json)"
+            echo "base=$(jq -c '.runners as $r | .base | .include |= map(. + {runner: $r[.arch]})' .github/build-matrix.json)"
+            echo "fat=$(jq -c '.runners as $r | .fat | .include |= map(. + {runner: $r[.arch]})' .github/build-matrix.json)"
             echo "base-flavors=$(jq -c '{flavor: [.base.include[].flavor] | unique}' .github/build-matrix.json)"
             echo "fat-flavors=$(jq -c '{flavor: [.fat.include[].flavor] | unique}' .github/build-matrix.json)"
           } >> "$GITHUB_OUTPUT"
 
   build:
     needs: matrix
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.base) }}
@@ -64,7 +64,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up QEMU
+        if: matrix.arch == 's390x'
         uses: docker/setup-qemu-action@v4
+        with:
+          platforms: s390x
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -159,7 +162,7 @@ jobs:
 
   build-fat:
     needs: [matrix, manifest]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.fat) }}
@@ -169,7 +172,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up QEMU
+        if: matrix.arch == 's390x'
         uses: docker/setup-qemu-action@v4
+        with:
+          platforms: s390x
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4

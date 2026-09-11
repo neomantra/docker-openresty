@@ -244,9 +244,11 @@ The GitHub Actions to build is located in the [`.github/workflows/docker-publish
 
 Builds, PR validation, and manifest generation share
 [`.github/build-matrix.json`](.github/build-matrix.json): 16 Linux flavors and
-35 flavor/architecture combinations. Add or remove matrix entries there, not in
-separate workflow lists. The publishing workflow accepts master or release tags;
-use the validation workflow for feature branches.
+35 flavor/architecture combinations, plus the `runners` map that assigns each
+architecture its hosted runner label: amd64 and arm64 build natively (arm64 on
+`ubuntu-24.04-arm`) and s390x builds under QEMU on amd64. Add or remove matrix
+entries there, not in separate workflow lists. The publishing workflow accepts
+master or release tags; use the validation workflow for feature branches.
 
 | Environment Variable | Description |
 |:---------------------|:----------- |
@@ -314,13 +316,12 @@ production registry credentials. Each flavor/architecture row of the shared
 matrix runs as its own job, building from this checkout and invoking the same
 registry E2E harness used locally. Fat rows first build and test their
 corresponding standard base, assemble its manifest, and build the fat image
-from that tag exactly as production does. amd64 and arm64 rows run natively on
-hosted runners; s390x executes through QEMU. Because production builds and
-tests arm64 under QEMU on amd64 runners, one additional job runs `bookworm` and
-`bookworm-valgrind` across all of their architectures under emulation, which
-also exercises genuinely multi-architecture manifest assembly. Emulated runtime
-coverage is not a claim of testing on native s390x hardware. Documentation-only
-changes skip the workflow.
+from that tag exactly as production does. Rows use the same runner labels as
+production: amd64 and arm64 run natively and s390x executes through QEMU. One
+additional job builds both architectures of `bookworm` into a single registry,
+with arm64 under QEMU, so genuinely multi-architecture manifest assembly is
+exercised. Emulated runtime coverage is not a claim of testing on native s390x
+hardware. Documentation-only changes skip the workflow.
 
 The harness starts two registries on random loopback ports and creates a dedicated
 Buildx builder. It cleans up its own containers and builder on exit, leaving any

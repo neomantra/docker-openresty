@@ -8,7 +8,8 @@ jq -e '
   ($rows | length > 0) and
   (($rows | map([.flavor, .arch]) | unique | length) == ($rows | length)) and
   all($rows[]; .platforms == ("linux/" + .arch)) and
-  all(.fat.include[]; . as $fat | any($rows[]; .flavor == $fat.base_flavor and .arch == $fat.arch))
+  all(.fat.include[]; . as $fat | any($rows[]; .flavor == $fat.base_flavor and .arch == $fat.arch)) and
+  (.runners as $r | all($rows[]; ($r[.arch] | type) == "string"))
 ' "$matrix" >/dev/null
 while IFS= read -r file; do test -f "$file"; done < <(jq -r '(.base.include + .fat.include)[].dockerfile' "$matrix")
 export DRY_RUN=true
