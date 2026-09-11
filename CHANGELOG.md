@@ -3,6 +3,8 @@
 
 ## Unreleased
 
+ * Fix the default document root in Bookworm debug and Valgrind images, which
+   previously pointed at the normal flavor's prefix and returned HTTP 404.
  * Add optional `-entrypoint` variants for every published Linux flavor, including
    fat, buildpack, debug, and Valgrind variants. Existing images and `latest`
    retain their startup behavior and configuration.
