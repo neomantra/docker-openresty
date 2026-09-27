@@ -488,19 +488,19 @@ $ docker inspect openresty/openresty:1.17.8.1-0-bionic | jq '.[].Config.Labels'
 Docker CMD
 ==========
 
-See also [Docker Entrypoint](#docker-entrypoint): since `1.31.1.1-3`, Linux images define an `ENTRYPOINT` that runs scripts in `/docker-entrypoint.d/` before `exec`ing the command when it is `openresty`/`nginx` (and variants).  The default `CMD` remains a full OpenResty invocation with `-g "daemon off;"`.
+Standard Linux flavors have no `ENTRYPOINT`; their default `CMD` is a full OpenResty invocation with `-g "daemon off;"`. Only the opt-in `-entrypoint` variants run scripts in `/docker-entrypoint.d/` before `exec`ing an `openresty`/`nginx` command (and supported variants). Their default `CMD` is `["-g", "daemon off;"]`, and the entrypoint prepends the flavor's `RESTY_ENTRYPOINT_COMMAND`. See [Docker Entrypoint](#docker-entrypoint).
 
 The `-g "daemon off;"` directive is used in the Dockerfile CMD to keep the Nginx daemon running after container creation. If this directive is added to the nginx.conf, then the `docker run` should explicitly invoke `openresty` (or `nginx` for `windows` images):
 ```
 docker run [options] openresty/openresty:noble openresty
 ```
 
-Invoking another command (for example the `resty` utility) skips the entrypoint startup scripts and `exec`s that command directly:
+Invoke another command, for example the `resty` utility, like so:
 ```
 docker run [options] openresty/openresty:noble resty [script.lua]
 ```
 
-On Linux images, replacing the entrypoint entirely (`docker run --entrypoint ...` or Kubernetes `command:`) restores pre-`1.31.1.1-3` behavior; a plain command override (Kubernetes `args:`) still goes through the entrypoint.  See [Docker Entrypoint](#docker-entrypoint) for flag arguments, template rendering, and custom init scripts.
+On `-entrypoint` variants, commands such as `resty` bypass startup hooks. Replacing the entrypoint entirely (`docker run --entrypoint ...` or Kubernetes `command:`) also skips hooks, but leaves the derived image's PID configuration and directory permissions in place. A plain command override (Kubernetes `args:`) still passes through the entrypoint. Select a standard flavor to retain the original runtime defaults. See [Docker Entrypoint](#docker-entrypoint) for flag arguments, template rendering, and custom init scripts.
 
 *NOTE* The `alpine` images do not include the packages `perl` and `ncurses`, which is needed by the `resty` utility.
 

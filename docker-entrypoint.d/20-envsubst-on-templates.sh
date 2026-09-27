@@ -62,8 +62,19 @@ auto_envsubst() {
     entrypoint_log "$ME: ERROR: $template_dir exists, but $output_dir is not writable"
     return 1
   fi
+  # Check both traversals before rendering anything. A find in a pipeline or
+  # an if-condition can fail without set -e stopping this POSIX shell.
+  if ! templates=$(find "$template_dir" -follow -type f -name "*$suffix" -print); then
+    entrypoint_log "$ME: ERROR: cannot scan templates in $template_dir"
+    return 1
+  fi
+  if ! stream_templates=$(find "$template_dir" -follow -type f -name "*$stream_suffix" -print); then
+    entrypoint_log "$ME: ERROR: cannot scan stream templates in $template_dir"
+    return 1
+  fi
   defined_envs=$(awk -v filter="$filter" 'END { for (name in ENVIRON) if (name ~ filter) printf "${%s} ", name }' < /dev/null)
-  find "$template_dir" -follow -type f -name "*$suffix" -print | while read -r template; do
+  while IFS= read -r template; do
+    [ -n "$template" ] || continue
     relative_path="${template#"$template_dir/"}"
     output_path="$output_dir/${relative_path%"$suffix"}"
     subdir=$(dirname "$relative_path")
@@ -71,17 +82,19 @@ auto_envsubst() {
     mkdir -p "$output_dir/$subdir"
     entrypoint_log "$ME: Running envsubst on $template to $output_path"
     envsubst "$defined_envs" < "$template" > "$output_path"
-  done
+  done <<EOF
+$templates
+EOF
 
-  # Print the first file with the stream suffix, this will be false if there are none
-  if test -n "$(find "$template_dir" -name "*$stream_suffix" -print -quit)"; then
+  if [ -n "$stream_templates" ]; then
     mkdir -p "$stream_output_dir"
     if [ ! -w "$stream_output_dir" ]; then
       entrypoint_log "$ME: ERROR: $template_dir exists, but $stream_output_dir is not writable"
       return 1
     fi
     add_stream_block
-    find "$template_dir" -follow -type f -name "*$stream_suffix" -print | while read -r template; do
+    while IFS= read -r template; do
+      [ -n "$template" ] || continue
       relative_path="${template#"$template_dir/"}"
       output_path="$stream_output_dir/${relative_path%"$stream_suffix"}"
       subdir=$(dirname "$relative_path")
@@ -89,7 +102,9 @@ auto_envsubst() {
       mkdir -p "$stream_output_dir/$subdir"
       entrypoint_log "$ME: Running envsubst on $template to $output_path"
       envsubst "$defined_envs" < "$template" > "$output_path"
-    done
+    done <<EOF
+$stream_templates
+EOF
   fi
 }
 

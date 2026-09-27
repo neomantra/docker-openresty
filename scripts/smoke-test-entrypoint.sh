@@ -93,14 +93,42 @@ server {
     proxy_pass 127.0.0.1:${ENTRYPOINT_TEST_PORT};
 }
 EOF
-"${RUN[@]}" -e ENTRYPOINT_TEST_VALUE=rendered -e ENTRYPOINT_TEST_PORT=9 \
-    -e 'NGINX_ENVSUBST_FILTER=^ENTRYPOINT_TEST_' \
-    -v "$TEST_DIR/templates:/etc/nginx/templates:ro" "$IMAGE" sh -ec '
-    /docker-entrypoint.sh -t
-    grep -F '\''rendered:$request_uri'\'' /etc/nginx/conf.d/default.conf
-    grep -F "proxy_pass 127.0.0.1:9;" /etc/nginx/stream-conf.d/tcp.conf
-    grep -F "include /etc/nginx/stream-conf.d/*.conf;" /etc/nginx/conf.d/stream.main
-    '
+# Exercise both a direct template directory and a symlink to that directory.
+for template_dir in /probe/templates /etc/nginx/templates; do
+    # shellcheck disable=SC2016 # Preserve the literal nginx variable.
+    "${RUN[@]}" -e ENTRYPOINT_TEST_VALUE=rendered -e ENTRYPOINT_TEST_PORT=9 \
+        -e 'NGINX_ENVSUBST_FILTER=^ENTRYPOINT_TEST_' \
+        -e "NGINX_ENVSUBST_TEMPLATE_DIR=$template_dir" \
+        -v "$TEST_DIR/templates:/probe/templates:ro" "$IMAGE" sh -ec '
+        ln -s /probe/templates /etc/nginx/templates
+        /docker-entrypoint.sh -t
+        grep -F '\''rendered:$request_uri'\'' /etc/nginx/conf.d/default.conf
+        grep -F "proxy_pass 127.0.0.1:9;" /etc/nginx/stream-conf.d/tcp.conf
+        grep -F "include /etc/nginx/stream-conf.d/*.conf;" /etc/nginx/conf.d/stream.main
+        '
+done
+
+# Unreadable template roots and nested directories must stop startup even when
+# output is writable. Create permissions inside the container so bind-mount
+# ownership differences between Linux and Docker Desktop cannot mask failures.
+for unreadable in /tmp/templates /tmp/templates/private; do
+    # shellcheck disable=SC2016 # Expand UNREADABLE_DIR inside the container.
+    expect_failure --user 12345:12345 \
+        -e NGINX_ENVSUBST_TEMPLATE_DIR=/tmp/templates \
+        -e NGINX_ENVSUBST_OUTPUT_DIR=/tmp/rendered \
+        -e "UNREADABLE_DIR=$unreadable" "$IMAGE" sh -ec '
+        mkdir -p /tmp/templates/private /tmp/rendered
+        printf "%s\n" "server { listen 8080; }" > /tmp/templates/http.conf.template
+        printf "%s\n" "server { listen 18081; proxy_pass 127.0.0.1:9; }" > /tmp/templates/private/tcp.conf.stream-template
+        chmod 000 "$UNREADABLE_DIR"
+        /docker-entrypoint.sh -t
+        ' || {
+        echo "Unreadable templates did not stop startup: $result" >&2
+        exit 1
+    }
+    [[ "$result" == *'ERROR: cannot scan templates'* ]]
+    [[ "$result" != *'Running envsubst'* && "$result" != *'Configuration complete'* ]]
+done
 
 # Existing stream configuration must survive, with an explicit startup failure.
 printf '%s\n' '# sentinel' > "$TEST_DIR/stream.main"

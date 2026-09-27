@@ -3,6 +3,10 @@
 
 ## Unreleased
 
+ * Reject template traversal errors before rendering configuration, and follow
+   symlinked template directories for stream templates as well as HTTP templates.
+ * Extend the runtime smoke fixture with LuaJIT FFI integer conversion and regex
+   regression checks, including coverage for openresty/openresty#1152.
  * Add non-publishing PR validation across the shared Linux build matrix (#125),
    with HTTP/Lua/logging checks for standard and entrypoint images. Each
    flavor/architecture row is a separate job; amd64 and arm64 run natively on
