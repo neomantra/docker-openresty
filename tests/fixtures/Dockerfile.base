@@ -1,0 +1,4 @@
+# Optional local-only investigation against a published base image.
+# Normal PR/release validation builds the repository's actual Dockerfiles.
+ARG BASE
+FROM ${BASE}

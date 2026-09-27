@@ -56,7 +56,7 @@ docker build -t myopenresty-restyrepo \
 | RESTY_VERSION                           | 1.27.1.2 / v1.31.1.1 for `restyrepo` | The version of OpenResty to use. For `restyrepo`, this is the branch or tag checked out from `RESTY_SOURCE_REPO` and should include the full ref name, such as `v1.31.1.1`. |
 | RESTY_SOURCE_REPO                       | "https://github.com/openresty/openresty.git" | The OpenResty source repository to clone. Used by `restyrepo`. |
 | RESTY_LUAROCKS_VERSION                  | 3.13.0 | The version of LuaRocks to use. |
-| RESTY_OPENSSL_VERSION                   | 3.5.7 | The version of OpenSSL to use. |
+| RESTY_OPENSSL_VERSION                   | 3.5.8 | The version of OpenSSL to use. |
 | RESTY_OPENSSL_PATCH_VERSION             | 3.5.5 | The version of OpenSSL to use when patching. |
 | RESTY_OPENSSL_URL_BASE                  | "https://github.com/openssl/openssl/releases/download/openssl-${RESTY_OPENSSL_VERSION}" | The base of the URL to download OpenSSL from. |
 | RESTY_OPENSSL_BUILD_OPTIONS             | "enable-camellia enable-seed enable-rfc3779 enable-cms enable-md2 enable-rc5 enable-weak-ssl-ciphers enable-ssl3 enable-ssl3-method enable-md2 enable-ktls enable-fips" | Options to tweak Resty's OpenSSL build. |
@@ -145,19 +145,18 @@ docker build --build-arg RESTY_RPM_FLAVOR="-debug" -f fedora/Dockerfile .
 Building (DEB based)
 ====================
 
-OpenResty now now has [Debian Packages (DEBs) available](https://openresty.org/en/deb-packages.html).  The `bullseye` image use these DEBs rather than building from source.
+OpenResty now now has [Debian Packages (DEBs) available](https://openresty.org/en/deb-packages.html).  The `bookworm` image uses these DEBs rather than building from source.
 
 You can derive your own Docker images from this to install your own packages.  See [bookworm/Dockerfile.fat](https://github.com/openresty/docker-openresty/blob/master/bookworm/Dockerfile.fat) and [buster/Dockerfile.luarocks_example](https://github.com/openresty/docker-openresty/blob/master/archive/buster/Dockerfile.luarocks_example).
 
 This Docker image can be built and customized by cloning the repo and running `docker build` with the desired Dockerfile:
 
  * [Debian Bookworm 12 DEB](https://github.com/openresty/docker-openresty/blob/master/bookworm/Dockerfile) (`bookworm/Dockerfile`)
- * [Debian Bullseye 11 DEB](https://github.com/openresty/docker-openresty/blob/master/bullseye/Dockerfile) (`bullseye/Dockerfile`)
 
 The following are the available build-time options. They can be set using the `--build-arg` CLI argument, like so:
 
 ```
-docker build --build-arg RESTY_DEB_FLAVOR="-debug" -f bullseye/Dockerfile .
+docker build --build-arg RESTY_DEB_FLAVOR="-debug" -f bookworm/Dockerfile .
 ```
 
 | Key | Default | Description |
@@ -166,7 +165,7 @@ docker build --build-arg RESTY_DEB_FLAVOR="-debug" -f bullseye/Dockerfile .
 |RESTY_APT_PGP     | "https://openresty.org/package/pubkey.gpg" | URL to download APT PGP key from |
 |RESTY_APT_ARCH    | `amd64` | Architecture for APT lookups |
 |RESTY_IMAGE_BASE  | "debian" | The Debian Docker image base to build `FROM`. |
-|RESTY_IMAGE_TAG   | "bullseye-slim" | The Debian Docker image tag to build `FROM`. |
+|RESTY_IMAGE_TAG   | "bookworm-slim" | The Debian Docker image tag to build `FROM`. |
 |RESTY_DEB_FLAVOR  | "" | The `openresty` package flavor to use.  Possibly `"-debug"` or `"-valgrind"`. |
 |RESTY_DEB_VERSION | "=1.27.1.2-1~bookworm1" | The [Debian package version](https://openresty.org/package/debian/pool/openresty/o/openresty/) to use, with `=` prepended. |
 |RESTY_FAT_DEB_FLAVOR  | "" | The `openresty` package flavor to use to install "fat" packages.  Possibly `"-debug"` or `"-valgrind"`. |
@@ -231,7 +230,25 @@ docker build --build-arg RESTY_VERSION="1.27.1.2" -f windows/Dockerfile .
 GitHub Actions
 ==============
 
+The standard Linux images retain their existing startup model. Each CI
+job also builds an optional entrypoint variant from that job's base-image digest,
+using the shared [entrypoint/Dockerfile](entrypoint/Dockerfile). Both standard and
+entrypoint images are pushed as untagged candidate digests, tested, and only then
+given public tags. Tests exercise the stock default page, Lua execution, and actual
+access/error log delivery. Entrypoint variants additionally test hooks, templates,
+and non-root/read-only startup.
+Multi-architecture manifests and the optional Docker Hub mirror follow the same
+flavor/version conventions as the base images; `latest` remains the standard image.
+
 The GitHub Actions to build is located in the [`.github/workflows/docker-publish.yml`](./.github/workflows/docker-publish.yml) file.
+
+Builds, PR validation, and manifest generation share
+[`.github/build-matrix.json`](.github/build-matrix.json): 16 Linux flavors and
+35 flavor/architecture combinations, plus the `runners` map that assigns each
+architecture its hosted runner label: amd64 and arm64 build natively (arm64 on
+`ubuntu-24.04-arm`) and s390x builds under QEMU on amd64. Add or remove matrix
+entries there, not in separate workflow lists. The publishing workflow accepts
+master or release tags; use the validation workflow for feature branches.
 
 | Environment Variable | Description |
 |:---------------------|:----------- |
@@ -246,7 +263,109 @@ The GitHub Actions to build is located in the [`.github/workflows/docker-publish
 | DOCKERHUB_PASSWORD | Docker Hub password |
 
 
+Building Entrypoint Variants
+============================
+
+Build a thin entrypoint layer on any published Linux flavor, or a local standard
+image you have just built:
+
+```bash
+docker build -f entrypoint/Dockerfile \
+  --build-arg RESTY_ENTRYPOINT_BASE=openresty/openresty:bookworm \
+  -t openresty-local:bookworm-entrypoint .
+```
+
+Use a full `image@sha256:...` reference for an immutable base; CI always supplies
+the digest produced by the preceding base build. OpenResty is not rebuilt.
+
+| Build argument | Default | Purpose |
+| --- | --- | --- |
+| `RESTY_ENTRYPOINT_BASE` | `openresty/openresty:bookworm` | Full base image reference, including tag or digest |
+| `RESTY_ENTRYPOINT_COMMAND` | `openresty` | Server executable used for leading flags and the default command |
+| `RESTY_PREFIX` | `/usr/local/openresty` | Prefix containing the server configuration, logs, and HTML |
+
+For `bookworm-debug-entrypoint`, use the `bookworm-debug` base, command
+`openresty-debug`, and prefix `/usr/local/openresty-debug`. For
+`bookworm-valgrind-entrypoint`, use the corresponding `-valgrind` values.
+Standard and fat flavors use the default command and prefix.
+
+The local build helper selects these arguments for suffixed flavor names:
+
+```bash
+./scripts/test-build-actions.sh bookworm-debug-entrypoint arm64
+```
+
+It derives from the published base flavor by default; set `RESTY_ENTRYPOINT_BASE`
+to override that reference. To exercise the layer after a local build:
+
+```bash
+SMOKE_PLATFORM=linux/arm64 bash scripts/smoke-test-entrypoint.sh openresty-local:bookworm-entrypoint
+```
+
+The smoke suite tests the default server command, except for `bookworm-valgrind-entrypoint`, whose diagnostic server runs under Valgrind after startup hooks and configuration validation. Both paths must serve HTTP as an arbitrary UID with capabilities dropped, including with a read-only root filesystem.
+
+Select the platform you built (`linux/amd64`, `linux/arm64`, or `linux/s390x`).
+The suite uses disposable containers and dynamically allocated localhost ports.
+
 End-To-End Tests
 ================
 
-The script [`./tests/e2e/run-test.sh`](./tests/e2e/run-test.sh) will stand up two local container registries and attempt to build all the images.
+The [Docker validation workflow](.github/workflows/docker-validate.yml) runs on
+pull requests and manual dispatch with read-only repository permissions and no
+production registry credentials. Each flavor/architecture row of the shared
+matrix runs as its own job, building from this checkout and invoking the same
+registry E2E harness used locally. Fat rows first build and test their
+corresponding standard base, assemble its manifest, and build the fat image
+from that tag exactly as production does. Rows use the same runner labels as
+production: amd64 and arm64 run natively and s390x executes through QEMU. One
+additional job builds both architectures of `bookworm` into a single registry,
+with arm64 under QEMU, so genuinely multi-architecture manifest assembly is
+exercised. Emulated runtime coverage is not a claim of testing on native s390x
+hardware. Documentation-only changes skip the workflow.
+
+The harness starts two registries on random loopback ports and creates a dedicated
+Buildx builder. It cleans up its own containers and builder on exit, leaving any
+existing registries and the selected builder alone. Act is no longer required.
+Prerequisites are Docker with Buildx, Bash, jq, curl, and shasum; foreign
+architectures require binfmt/QEMU support (the PR workflow configures it for s390x).
+
+```bash
+# Fast, offline matrix/tag/manifest checks
+bash tests/test-ci-contracts.sh
+
+# Build and exercise both architectures for these representative flavors
+bash tests/e2e/run-test.sh bookworm alpine-apk
+
+# Limit architectures; the PR workflow runs one architecture per job this way
+E2E_ARCHS=arm64 bash tests/e2e/run-test.sh bookworm-fat
+```
+
+Production and E2E share `image-tags.sh`, `test-and-publish.sh`,
+`fat-base-tag.sh`, and `create-manifest.sh`; the publishing workflow pushes the tags `image-tags.sh`
+emits verbatim, and `docker/metadata-action` only derives OCI labels. The harness verifies digest-pinned derivation and inherited
+base layers; release/master aliases; multi-platform manifests and pulls from both
+registries; `latest` remaining standard Bookworm; and mirror-disabled behavior.
+It builds an intentionally broken entrypoint image and proves that a failed test
+neither creates new tags nor overwrites previously tested tags in either registry.
+Candidate digests can exist before testing; public tags cannot.
+
+For runtime-only investigation, an explicit published base can replace the source
+build. This is not full validation of the checkout's base Dockerfile and is never
+used by the PR workflow:
+
+```bash
+E2E_BASE_IMAGE=openresty/openresty:alma E2E_ARCHS=s390x \
+  bash tests/e2e/run-test.sh alma
+```
+
+Standalone runtime tests can also use an already-built image:
+
+```bash
+SMOKE_PLATFORM=linux/arm64 bash scripts/smoke-test-image.sh IMAGE bookworm standard
+SMOKE_PLATFORM=linux/arm64 bash scripts/smoke-test-image.sh IMAGE bookworm entrypoint
+```
+
+Debug images use their flavor-specific document root. Valgrind images are tested
+under Valgrind, including configuration validation before instrumentation for
+entrypoint variants; their direct server invocation is not used as a production
+readiness criterion.

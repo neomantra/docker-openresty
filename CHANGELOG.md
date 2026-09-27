@@ -1,6 +1,44 @@
 `docker-openresty` Changelog
 ============================
 
+## Unreleased
+
+ * Reject template traversal errors before rendering configuration, and follow
+   symlinked template directories for stream templates as well as HTTP templates.
+ * Extend the runtime smoke fixture with LuaJIT FFI integer conversion and regex
+   regression checks, including coverage for openresty/openresty#1152.
+ * Add non-publishing PR validation across the shared Linux build matrix (#125),
+   with HTTP/Lua/logging checks for standard and entrypoint images. Each
+   flavor/architecture row is a separate job; amd64 and arm64 run natively on
+   hosted runners and s390x executes under QEMU.
+ * Build and test arm64 images natively on `ubuntu-24.04-arm` runners instead
+   of under QEMU; only s390x remains emulated.
+ * Gate standard-image tags on runtime tests as well as entrypoint tags. Share
+   production tag/publish/manifest scripts with disposable-registry E2E tests,
+   including mirror-disabled and failed-candidate/no-tag-overwrite checks.
+ * Fix the default document root in Bookworm debug and Valgrind images, which
+   previously pointed at the normal flavor's prefix and returned HTTP 404.
+ * Add optional `-entrypoint` variants for every published Linux flavor, including
+   fat, buildpack, debug, and Valgrind variants. Existing images and `latest`
+   retain their startup behavior and configuration.
+ * Build the entrypoint layer from the exact base-image digest produced by CI;
+   test each architecture before publishing entrypoint tags and mirrors.
+ * Entrypoint variants add sorted startup hooks, HTTP/stream environment templates,
+   log-symlink warnings, and flag forwarding to the flavor's OpenResty executable
+   (#186, #146, #91).
+ * Support arbitrary non-root UIDs in entrypoint variants by relocating the PID
+   to `/var/run/openresty/nginx.pid` and making that directory mode `1777` (#119).
+ * Preserve exported `.envsh` variables in the final command and reject failed
+   hooks, unwritable template output, and conflicting `stream.main` files.
+ * Add local smoke coverage for non-root/read-only startup, variants, hooks,
+   command bypass, and HTTP/stream template rendering (#125).
+
+## 1.31.1.1-3 (2026-09-04)
+
+ * Upgrade OpenSSL to 3.5.8
+ * Add `bookworm-debug` and `bookworm-valgrind` flavors
+ * Move `bullseye` flavors to archive as Debian 11 LTS ended on 2026-08-31 and `bullseye-security` is no longer published
+
 ## 1.31.1.1-2 (2026-07-08)
 
  * Upgrade OpenSSL to 3.5.7 (#307)

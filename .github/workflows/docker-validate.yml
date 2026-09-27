@@ -1,0 +1,66 @@
+name: Docker validation
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: docker-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      rows: ${{ steps.matrix.outputs.rows }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check matrix and tag contracts
+        run: bash tests/test-ci-contracts.sh
+      # One job per flavor/architecture row on the same runner label production
+      # uses for that architecture; only s390x needs QEMU.
+      - id: matrix
+        run: |
+          echo "rows=$(jq -c '.runners as $r | {include: [(.base.include + .fat.include)[] | {flavor, arch, runner: $r[.arch]}]}' .github/build-matrix.json)" >> "$GITHUB_OUTPUT"
+  registry-e2e:
+    needs: matrix
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.rows) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v4
+        if: matrix.arch == 's390x'
+        with:
+          platforms: s390x
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and test this row in disposable registries
+        env:
+          FLAVOR: ${{ matrix.flavor }}
+          E2E_ARCHS: ${{ matrix.arch }}
+        run: bash tests/e2e/run-test.sh "$FLAVOR"
+  # The per-row jobs above only ever assemble single-source manifests. Build
+  # both architectures of one fast package-based flavor into a single registry
+  # (arm64 under QEMU here) so genuinely multi-architecture manifest assembly
+  # and pulls are exercised on every PR.
+  registry-e2e-multiarch:
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - name: Assemble and test a multi-architecture bookworm manifest
+        run: bash tests/e2e/run-test.sh bookworm

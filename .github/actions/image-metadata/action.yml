@@ -1,0 +1,49 @@
+name: Image metadata
+description: Use the same release tags as local registry E2E tests
+inputs:
+  image:
+    description: Registry image
+    required: true
+  flavor:
+    description: Image flavor
+    required: true
+  arch:
+    description: Architecture suffix
+    required: true
+outputs:
+  tags:
+    description: Fully qualified tags, exactly as scripts/image-tags.sh emits them
+    value: ${{ steps.tags.outputs.tags }}
+  labels:
+    description: OCI labels
+    value: ${{ steps.meta.outputs.labels }}
+runs:
+  using: composite
+  steps:
+    # Tags come straight from the script shared with tests/e2e/run-test.sh so
+    # production publishes exactly what the E2E harness tested. metadata-action
+    # is fed the same values only to derive OCI labels.
+    - id: tags
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        FLAVOR: ${{ inputs.flavor }}
+        ARCH: ${{ inputs.arch }}
+      run: |
+        tags=$(bash scripts/image-tags.sh "$IMAGE" "$FLAVOR" "$ARCH")
+        {
+          echo 'tags<<IMAGE_TAGS'
+          printf '%s\n' "$tags"
+          echo IMAGE_TAGS
+          echo 'rules<<TAG_RULES'
+          while IFS= read -r tag; do
+            printf 'type=raw,value=%s\n' "${tag#"$IMAGE":}"
+          done <<< "$tags"
+          echo TAG_RULES
+        } >> "$GITHUB_OUTPUT"
+    - id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ inputs.image }}
+        flavor: latest=false
+        tags: ${{ steps.tags.outputs.rules }}
