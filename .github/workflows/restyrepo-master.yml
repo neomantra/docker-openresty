@@ -58,11 +58,16 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Extract metadata (tags, labels)
+      - name: Resolve image name
+        id: image
+        shell: bash
+        run: echo "name=${GHCR_IMAGE,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata (labels)
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.GHCR_IMAGE }}
+          images: ${{ steps.image.outputs.name }}
           flavor: latest=false
           tags: type=raw,value=restyrepo-master-${{ matrix.arch }}
 
@@ -78,15 +83,13 @@ jobs:
             ${{ matrix.build-args }}
           load: true
           provenance: false
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: snapshot-under-test:${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Smoke test
-        env:
-          IMAGE_REF: ${{ steps.meta.outputs.tags }}
         run: |
           docker run --rm --platform linux/${{ matrix.arch }} \
-            -v "$PWD/tests/smoke:/smoke:ro" "$IMAGE_REF" bash /smoke/smoke.sh
+            -v "$PWD/tests/smoke:/smoke:ro" snapshot-under-test:${{ matrix.arch }} bash /smoke/smoke.sh
 
       - uses: docker/login-action@v4
         with:
@@ -94,14 +97,32 @@ jobs:
           username: ${{ secrets.GHCR_USERNAME || github.actor }}
           password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - name: Push tested image to GHCR
+      # Push by digest only: no tag moves until every architecture has passed
+      # and the publish job creates the manifest. Inputs match "Build snapshot"
+      # exactly, so this re-exports the tested build from the builder's cache.
+      - name: Push tested image to GHCR by digest
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: restyrepo/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            RESTY_VERSION=${{ needs.source.outputs.sha }}
+            RESTY_J=${{ env.RESTY_J }}
+            ${{ matrix.build-args }}
+          provenance: false
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Record tested image digest
+        shell: bash
         env:
-          IMAGE_REF: ${{ steps.meta.outputs.tags }}
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.push.outputs.digest }}
         run: |
-          docker push "$IMAGE_REF"
-          docker image inspect "$IMAGE_REF" | jq -erj --arg repo "${IMAGE_REF%:*}@" \
-            '.[0].RepoDigests | map(select(startswith($repo))) | select(length == 1) | first' \
-            > "$RUNNER_TEMP/${{ matrix.arch }}.ref"
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::No digest from push step: '$DIGEST'"; exit 1; }
+          printf '%s' "$IMAGE_NAME@$DIGEST" > "$RUNNER_TEMP/${{ matrix.arch }}.ref"
 
       - name: Save tested image digest
         uses: actions/upload-artifact@v7
