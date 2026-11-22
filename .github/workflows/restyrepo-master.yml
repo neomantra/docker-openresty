@@ -156,8 +156,11 @@ jobs:
         working-directory: ${{ runner.temp }}/snapshot
         run: |
           docker buildx imagetools create -t "${GHCR_IMAGE,,}:restyrepo-master" \
-            --metadata-file "$RUNNER_TEMP/manifest.json" \
             -f amd64.ref -f arm64.ref -f s390x.ref -f ppc64le.ref
+          digest=$(docker buildx imagetools inspect "${GHCR_IMAGE,,}:restyrepo-master" \
+            --format '{{json .Manifest}}' | jq -er '.digest')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Could not resolve published manifest digest."; exit 1; }
+          echo "$digest" > "$RUNNER_TEMP/manifest.digest"
 
       - uses: docker/login-action@v4
         if: vars.ENABLE_DOCKERHUB_MIRROR == 'true'
@@ -170,5 +173,5 @@ jobs:
         if: vars.ENABLE_DOCKERHUB_MIRROR == 'true'
         shell: bash
         run: |
-          digest=$(jq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/manifest.json")
+          digest=$(<"$RUNNER_TEMP/manifest.digest")
           docker buildx imagetools create -t "${DOCKERHUB_IMAGE,,}:restyrepo-master" "${GHCR_IMAGE,,}@$digest"
