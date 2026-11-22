@@ -1,0 +1,153 @@
+name: Build upstream snapshot
+
+on: workflow_dispatch
+
+concurrency: restyrepo-master-${{ github.ref }}
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  GHCR_IMAGE: ${{ vars.GHCR_IMAGE || format('ghcr.io/{0}/openresty', github.repository_owner) }}
+  DOCKERHUB_REGISTRY: ${{ vars.DOCKERHUB_REGISTRY || 'docker.io' }}
+  DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || 'docker.io/openresty/openresty' }}
+  RESTY_J: ${{ vars.RESTY_J || '4' }}
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.upstream.outputs.sha }}
+    steps:
+      - name: Resolve upstream master
+        id: upstream
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo "::error::Run this workflow from the default branch ($DEFAULT_BRANCH)."
+            exit 1
+          fi
+          sha=$(git ls-remote --refs --exit-code https://github.com/openresty/openresty.git refs/heads/master \
+            | awk '$2 == "refs/heads/master" { print $1 }')
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: source
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64, s390x, ppc64le]
+        include:
+          - arch: ppc64le
+            # Test upstream's bundled LuaJIT with the PPC64 number-conversion fix.
+            build-args: |
+              RESTY_LUAJIT_OPTIONS=--with-luajit-xcflags='-DLUAJIT_NUMMODE=2 -DLUAJIT_ENABLE_LUA52COMPAT -DLUAJIT_DISABLE_JIT'
+              RESTY_EVAL_POST_DOWNLOAD_PRE_CONFIGURE=grep -q fctidz bundle/LuaJIT-*/src/vm_ppc.dasc
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-qemu-action@v4
+        if: matrix.arch == 's390x' || matrix.arch == 'ppc64le'
+        with:
+          platforms: ${{ matrix.arch }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.GHCR_IMAGE }}
+          flavor: latest=false
+          tags: type=raw,value=restyrepo-master-${{ matrix.arch }}
+
+      - name: Build snapshot
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: restyrepo/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            RESTY_VERSION=${{ needs.source.outputs.sha }}
+            RESTY_J=${{ env.RESTY_J }}
+            ${{ matrix.build-args }}
+          load: true
+          provenance: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Smoke test
+        env:
+          IMAGE_REF: ${{ steps.meta.outputs.tags }}
+        run: |
+          docker run --rm --platform linux/${{ matrix.arch }} \
+            -v "$PWD/tests/smoke:/smoke:ro" "$IMAGE_REF" bash /smoke/smoke.sh
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME || github.actor }}
+          password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Push tested image to GHCR
+        env:
+          IMAGE_REF: ${{ steps.meta.outputs.tags }}
+        run: |
+          docker push "$IMAGE_REF"
+          docker image inspect "$IMAGE_REF" | jq -erj --arg repo "${IMAGE_REF%:*}@" \
+            '.[0].RepoDigests | map(select(startswith($repo))) | select(length == 1) | first' \
+            > "$RUNNER_TEMP/${{ matrix.arch }}.ref"
+
+      - name: Save tested image digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: snapshot-${{ matrix.arch }}
+          path: ${{ runner.temp }}/${{ matrix.arch }}.ref
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME || github.actor }}
+          password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: snapshot-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/snapshot
+
+      - name: Publish GHCR manifest from tested digests
+        shell: bash
+        working-directory: ${{ runner.temp }}/snapshot
+        run: |
+          docker buildx imagetools create -t "${GHCR_IMAGE,,}:restyrepo-master" \
+            --metadata-file "$RUNNER_TEMP/manifest.json" \
+            -f amd64.ref -f arm64.ref -f s390x.ref -f ppc64le.ref
+
+      - uses: docker/login-action@v4
+        if: vars.ENABLE_DOCKERHUB_MIRROR == 'true'
+        with:
+          registry: ${{ env.DOCKERHUB_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Mirror published manifest to Docker Hub
+        if: vars.ENABLE_DOCKERHUB_MIRROR == 'true'
+        shell: bash
+        run: |
+          digest=$(jq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/manifest.json")
+          docker buildx imagetools create -t "${DOCKERHUB_IMAGE,,}:restyrepo-master" "${GHCR_IMAGE,,}@$digest"

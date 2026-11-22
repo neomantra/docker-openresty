@@ -234,6 +234,10 @@ GitHub Actions
 
 The GitHub Actions to build is located in the [`.github/workflows/docker-publish.yml`](./.github/workflows/docker-publish.yml) file.
 
+To publish an upstream snapshot, select **Actions → Build upstream snapshot → Run workflow** and choose this repository's default branch. The workflow resolves OpenResty's `master` to one commit, then builds and smoke-tests it on `amd64`, `arm64`, `s390x`, and `ppc64le`.
+
+After all four pass, the workflow publishes the `restyrepo-master` tag to `GHCR_IMAGE`, which defaults to `ghcr.io/<repository-owner>/openresty`. For this repository, the default pull command is `docker pull ghcr.io/openresty/openresty:restyrepo-master`. Set the repository variable `ENABLE_DOCKERHUB_MIRROR` to `true` to copy the same manifest to `DOCKERHUB_IMAGE` (default `docker.io/openresty/openresty`) using the `DOCKER_USERNAME` and `DOCKER_PASSWORD` secrets.
+
 Each flavor/architecture row builds on its own hosted runner.  amd64 rows run on `ubuntu-latest` and arm64 rows run natively on `ubuntu-24.04-arm`.  s390x and ppc64le rows build under QEMU emulation on `ubuntu-latest`, which is much slower.  Source-built flavors are compiled with `RESTY_J=4` to match the 4 vCPUs of hosted runners.
 
 | Environment Variable | Description |

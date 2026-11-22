@@ -59,6 +59,7 @@ These are examples of untagged image names, for reference:
 | `openresty/openresty:jammy` | Latest Ubuntu Jammy |
 | `openresty/openresty:alpine` | Latest Alpine |
 | `openresty/openresty:restyrepo` | Source build from the OpenResty tag pinned in the Dockerfile |
+| `openresty/openresty:restyrepo-master` | Most recent manually published snapshot of upstream `master` (when Docker Hub mirroring is enabled) |
 
 There are also specific tags for [Debug](https://openresty.org/en/deb-packages.html#openresty-debug) and [Valgrind](https://openresty.org/en/deb-packages.html#openresty-valgrind) OpenResty variants:
 | Image | Description |
