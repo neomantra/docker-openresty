@@ -11,8 +11,8 @@
 # secrets:
 #   GHCR_USERNAME: GitHub Container Registry username
 #   GHCR_PASSWORD: GitHub Container Registry password
-#   DOCKERHUB_USERNAME: Docker Hub username
-#   DOCKERHUB_PASSWORD: Docker Hub password
+#   DOCKER_USERNAME: Docker Hub username
+#   DOCKER_PASSWORD: Docker Hub password
 #
 
 name: Docker Build and Publish

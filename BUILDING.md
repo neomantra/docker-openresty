@@ -240,17 +240,20 @@ After all four pass, the workflow publishes the `restyrepo-master` tag to `GHCR_
 
 Each flavor/architecture row builds on its own hosted runner.  amd64 rows run on `ubuntu-latest` and arm64 rows run natively on `ubuntu-24.04-arm`.  s390x and ppc64le rows build under QEMU emulation on `ubuntu-latest`, which is much slower.  Source-built flavors are compiled with `RESTY_J=4` to match the 4 vCPUs of hosted runners.
 
-| Environment Variable | Description |
-|:---------------------|:----------- |
+| Repository Variable | Description |
+|:--------------------|:----------- |
 | GHCR_IMAGE | GitHub Container Registry image |
 | DOCKERHUB_IMAGE | Docker Hub image |
+| DOCKERHUB_REGISTRY | Docker Hub registry host (default `docker.io`) |
+| ENABLE_DOCKERHUB_MIRROR | Set to `true` to mirror published images to Docker Hub |
+| RESTY_J | `make` parallelism for source-built flavors (default `4`) |
 
 | Secrets | Description |
 |:---------------------|:----------- |
 | GHCR_USERNAME | GitHub Container Registry username |
 | GHCR_PASSWORD | GitHub Container Registry password |
-| DOCKERHUB_USERNAME | Docker Hub username |
-| DOCKERHUB_PASSWORD | Docker Hub password |
+| DOCKER_USERNAME | Docker Hub username |
+| DOCKER_PASSWORD | Docker Hub password |
 
 
 End-To-End Tests
