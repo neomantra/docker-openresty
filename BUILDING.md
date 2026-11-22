@@ -39,7 +39,7 @@ The following are the available build-time options. They can be set using the `-
 docker build --build-arg RESTY_J=4 -f jammy/Dockerfile .
 ```
 
-The `restyrepo` flavor is different from the other source builds: it clones `RESTY_SOURCE_REPO`, checks out `RESTY_VERSION` as a branch or tag, runs the OpenResty source repository's `make` target to generate an OpenResty source tarball, and then builds from that tarball.  Use it when you need to test an OpenResty source branch or fork before it is published as a release tarball or upstream package:
+The `restyrepo` flavor fetches the Git revision selected by `RESTY_VERSION` from `RESTY_SOURCE_REPO`, runs the OpenResty source repository's `make` target to generate a source tarball, and builds from that tarball. Use it to test an upstream branch or fork before a release. When a branch and a tag share a name, the short name selects the branch. Use `refs/tags/<name>` to select the tag explicitly.
 
 ```
 docker build -t myopenresty-restyrepo -f restyrepo/Dockerfile .
@@ -53,7 +53,7 @@ docker build -t myopenresty-restyrepo \
 |:-----------------------------------------| :-----: |:----------- |
 | RESTY_IMAGE_BASE                        | "ubuntu" / "alpine" / "debian" for `restyrepo` | The Ubuntu, Alpine, or Debian Docker image base to build `FROM`. |
 | RESTY_IMAGE_TAG                         | "noble" / "3.22.3" / "trixie-slim" for `restyrepo` | The Ubuntu, Alpine, or Debian Docker image tag to build `FROM`. |
-| RESTY_VERSION                           | 1.31.8.1 / v1.31.8.1 for `restyrepo` | The version of OpenResty to use. For `restyrepo`, this is the branch or tag checked out from `RESTY_SOURCE_REPO` and should include the full ref name, such as `v1.31.8.1`. |
+| RESTY_VERSION                           | 1.31.8.1 / v1.31.8.1 for `restyrepo` | The version of OpenResty to use. For `restyrepo`, use a branch or tag name, `HEAD`, a full `refs/*` name (such as `refs/tags/<name>` or `refs/pull/123/head`), or a full commit SHA from `RESTY_SOURCE_REPO`. |
 | RESTY_SOURCE_REPO                       | "https://github.com/openresty/openresty.git" | The OpenResty source repository to clone. Used by `restyrepo`. |
 | RESTY_LUAROCKS_VERSION                  | 3.13.0 | The version of LuaRocks to use. |
 | RESTY_OPENSSL_VERSION                   | 3.5.8 | The version of OpenSSL to use. |

@@ -11,7 +11,7 @@ LABEL maintainer="Evan Wies <evan@neomantra.net>"
 # Docker Build Arguments
 ARG RESTY_IMAGE_BASE="debian"
 ARG RESTY_IMAGE_TAG="trixie-slim"
-ARG RESTY_VERSION="v1.31.8.1" # Includes the full branch name, hence 'v' prefix
+ARG RESTY_VERSION="v1.31.8.1"
 ARG RESTY_SOURCE_REPO="https://github.com/openresty/openresty.git"
 ARG RESTY_LUAROCKS_VERSION="3.13.0"
 
@@ -133,10 +133,24 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
         unzip \
         wget \
     && cd /tmp \
-    && git clone --depth 1 --branch "${RESTY_VERSION}" "${RESTY_SOURCE_REPO}" openresty_src \
+    && git init openresty_src \
     && cd openresty_src \
+    && git remote add origin "${RESTY_SOURCE_REPO}" \
+    && ref="${RESTY_VERSION}" \
+    && if printf '%s\n' "$ref" | grep -Eq '^[[:xdigit:]]{40}$'; then \
+        { git fetch --depth 1 origin "$ref" || git fetch --tags origin; } \
+        && git checkout --detach "$ref"; \
+    else \
+        case "$ref" in \
+            HEAD|refs/*) ;; \
+            *) if git ls-remote --exit-code --heads origin "refs/heads/$ref" >/dev/null; then \
+                   ref="refs/heads/$ref"; \
+               else test "$?" -eq 2; fi ;; \
+        esac \
+        && git fetch --depth 1 origin "$ref" \
+        && git checkout --detach FETCH_HEAD; \
+    fi \
     && make \
-    && mv openresty-*.tar.gz "/tmp/openresty-${RESTY_VERSION}.tar.gz" \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential \
         gettext-base \
@@ -187,9 +201,9 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && CFLAGS="-g -O3" make -j${RESTY_J} \
     && CFLAGS="-g -O3" make -j${RESTY_J} install \
     && cd /tmp \
-    && tar xzf "openresty-${RESTY_VERSION}.tar.gz" \
-    && mv openresty-*/ "openresty-${RESTY_VERSION}" \
-    && cd /tmp/openresty-${RESTY_VERSION} \
+    && mkdir openresty-build \
+    && tar xzf openresty_src/openresty-*.tar.gz --strip-components=1 -C openresty-build \
+    && cd openresty-build \
     && if [ -n "${RESTY_LUAJIT_REF}" ]; then \
         LUAJIT_DIR=$(ls -d bundle/LuaJIT-*) \
         && echo "replacing ${LUAJIT_DIR} with ${RESTY_LUAJIT_REPO} at ${RESTY_LUAJIT_REF}" \
@@ -206,7 +220,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && rm -rf \
         openssl-${RESTY_OPENSSL_VERSION}.tar.gz openssl-${RESTY_OPENSSL_VERSION} \
         pcre2-${RESTY_PCRE_VERSION}.tar.gz pcre2-${RESTY_PCRE_VERSION} \
-        openresty-${RESTY_VERSION}.tar.gz openresty-${RESTY_VERSION} openresty_src \
+        openresty-build openresty_src \
     && curl -fSL https://luarocks.github.io/luarocks/releases/luarocks-${RESTY_LUAROCKS_VERSION}.tar.gz -o luarocks-${RESTY_LUAROCKS_VERSION}.tar.gz \
     && tar xzf luarocks-${RESTY_LUAROCKS_VERSION}.tar.gz \
     && cd luarocks-${RESTY_LUAROCKS_VERSION} \

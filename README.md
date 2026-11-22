@@ -58,7 +58,7 @@ These are examples of untagged image names, for reference:
 | `openresty/openresty:noble` | Latest Ubuntu Noble |
 | `openresty/openresty:jammy` | Latest Ubuntu Jammy |
 | `openresty/openresty:alpine` | Latest Alpine |
-| `openresty/openresty:restyrepo` | Latest OpenResty GitHub source branch build |
+| `openresty/openresty:restyrepo` | Source build from the OpenResty tag pinned in the Dockerfile |
 
 There are also specific tags for [Debug](https://openresty.org/en/deb-packages.html#openresty-debug) and [Valgrind](https://openresty.org/en/deb-packages.html#openresty-valgrind) OpenResty variants:
 | Image | Description |
@@ -131,7 +131,7 @@ OpenResty supports SSE 4.2 optimizations.  Starting with the `1.19.3.1` series, 
 
 It is *highly recommended* that you use the upstream-based images for best support.  For best stability, pin your images to the full tag, for example `1.21.4.1-0-bionic`.
 
-The `restyrepo` flavor is a built-from-source image that clones the OpenResty GitHub repository, builds the OpenResty source tarball from the selected branch or tag, and then builds OpenResty from that generated tarball.  It uses Debian Trixie as its base image and is published for `amd64`, `arm64`, `s390x`, and `ppc64le`.
+The `restyrepo` flavor fetches the selected Git revision of OpenResty, generates a source tarball, and builds OpenResty from it. It uses Debian Trixie as its base image and is published for `amd64`, `arm64`, `s390x`, and `ppc64le`. See [Building from source](BUILDING.md#building-from-source) for the supported refs.
 
 On `s390x` (IBM Z), `restyrepo` uses the bundled LuaJIT in interpreter-only mode and is built under QEMU emulation.  The image runs the same smoke tests as the other `restyrepo` architectures.
 
